@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-02-24]
+
+### Added
+
+- Dynamic focus switching for Oak ACP agent templates — users can now switch a running ACP agent's focus to one of four specialized templates (documentation, analysis, engineering, maintenance) via session configuration, enabling context-appropriate assistance without restarting the agent — [Implement dynamic focus switching for Oak ACP agent templates](http://localhost:38388/activity/sessions/d4572ed6-0f54-4b7e-8b5d-14099119049d), [Implement focus transition logic for Oak ACP agent templates](http://localhost:38388/activity/sessions/e7747ce2-d140-4a5b-991f-b4ad7e79e85a)
+- Full CI integration for ACP interactive sessions — ACP sessions now trigger Oak tool-usage hooks and generate session summaries, replacing the thin Claude wrapper with a fully OAK-intelligent experience that participates in codebase intelligence like any native session — [Implement tool usage hooks and session summaries for ACP flow](http://localhost:38388/activity/sessions/e16dc2e4-3cb1-4c25-b54f-ed722a9e9fea)
+- "Oak" agent type filter on session activity page — a new filter option lets users isolate sessions originating from the Oak ACP agent, completing end-to-end visibility of the ACP interactive session flow in the daemon UI — [Add Oak agent filter option to session activity page](http://localhost:38388/activity/sessions/32c76bb7-885d-4d4e-ade3-ea5a76a563ee)
+- Automated smoke-test for ACP daemon architecture — HTTP-based smoke-test exercises the running daemon end-to-end including session creation, tool delegation, and activity recording; also unifies agent naming to `oak` across the ACP module and removes leftover scaffolding artifacts — [Implement automated smoke‑test for oak daemon and clean up artifacts](http://localhost:38388/activity/sessions/6071a39b-3982-425d-aa1e-47a4159dec6d)
+
+### Changed
+
+- Upgrade command now launches in a detached subprocess from daemon UI — a new helper spawns `oak upgrade` as a detached process so the daemon UI remains responsive during upgrades rather than blocking on the CLI subprocess — [Implement detached upgrade command helper for daemon UI](http://localhost:38388/activity/sessions/e5c82db0-6d2b-4881-8c8c-c28ae1eea7ea)
+
+### Fixed
+
+- Fix `daemon_client.py` path construction causing `FileNotFoundError` — `discover_daemon` used an unresolved relative `rel_path` when locating the daemon port file; now resolves the full path via `Path(project_root).resolve() / rel_path` and returns `None` gracefully when the file is absent — [Implement automated smoke‑test for oak daemon and clean up artifacts](http://localhost:38388/activity/sessions/6071a39b-3982-425d-aa1e-47a4159dec6d)
+- Fix `_run_upgrade_pipeline` type errors in `restart.py` — `Path` type was not imported and the `run_in_executor` call passed a plain `dict` instead of the required `UpgradePlan` instance; both corrected to resolve Ruff static-analysis errors and prevent runtime type mismatches — [Implement detached upgrade command helper for daemon UI](http://localhost:38388/activity/sessions/e5c82db0-6d2b-4881-8c8c-c28ae1eea7ea)
+- Fix activity route registration typo and missing authentication — `@router.ge` decorator typo prevented the endpoint from registering with FastAPI, and activity routes lacked the shared `Authorization` header dependency used elsewhere in the daemon — [Implement tool usage hooks and session summaries for ACP flow](http://localhost:38388/activity/sessions/e16dc2e4-3cb1-4c25-b54f-ed722a9e9fea)
+
+### Notes
+
+> **Gotcha**: ACP focus switching injects a system-prompt override at session-config time. Mid-conversation agents will not retroactively reinterpret earlier messages under the new template — focus changes take effect on the next message boundary only.
+
+> **Gotcha**: The ACP smoke-test expects the daemon's activity store directory (`~/.oak/activity_store`) to exist and be writable before tests run. If the smoke-test exits with code 1, verify the directory exists with correct permissions and that `daemon/config.py` points to that path.
+
+## [2026-02-23]
+
+### Added
+
+- ACP (Agent Client Protocol) server for editor integration — OAK can now act as a first-class coding agent that editors communicate with via the ACP pipe; a dedicated `acp_server` feature module exposes agents over ACP with a non-blocking async stdin reader, `AgentSideConnection` wrapper, and Typer-based `serve` CLI command — [Add ACP SDK dependency and constants module for OAK Agent](http://localhost:38388/activity/sessions/1d6517aa-70fd-4b21-9f57-9f648356c86c), [Implement daemon‑delegation architecture for OAK ACP server and session manager](http://localhost:38388/activity/sessions/f70f69e8-672c-4260-9d9e-a31f120c2610), [Implement session manager integration with daemon‑delegation architecture](http://localhost:38388/activity/sessions/3318476c-99cc-4b8b-8fd7-287346104240)
+- ACP integrations UI — new `ACPIntegrations` component in the daemon UI shows per-editor integration cards (Zed, etc.) with enable/disable toggles; configuration is rendered from the ACP JSON schema and reloads CLI config on mount to stay in sync with backend — [Implement daemon‑delegation architecture for OAK ACP server and session manager](http://localhost:38388/activity/sessions/f70f69e8-672c-4260-9d9e-a31f120c2610)
+
+### Changed
+
+- Upgrade banner prompt text made more descriptive — the UI now displays a clearer label when an automatic update is detected and ready to apply, replacing the previous terse restart prompt — [Update Upgrade Prompt Text with Descriptive Label](http://localhost:38388/activity/sessions/864f4d39-ac4d-4a36-b882-c68bb5600863)
+
+### Fixed
+
+- Fix `ModuleNotFoundError` for `acp` package in tests — a lightweight local stub providing the minimal `acp` API surface (`start_tool_call`, `text_block`, `update_age`) was added to the repository and declared in `pyproject.toml`, removing the undeclared external dependency that broke the test suite — [Implement daemon‑delegation architecture for OAK ACP server and session manager](http://localhost:38388/activity/sessions/f70f69e8-672c-4260-9d9e-a31f120c2610)
+- Fix SQL syntax errors in `plan_detector.py` — escaped inequality operator (`\!=`) and reference to non-existent `timestamp_epoch` column caused SQLite parse failures; replaced with standard `!=` and the correct `created_at` column — [Implement daemon‑delegation architecture for OAK ACP server and session manager](http://localhost:38388/activity/sessions/f70f69e8-672c-4260-9d9e-a31f120c2610)
+
+### Notes
+
+> **Note**: The ACP server is shipped as an optional dependency (`acp` extra in `pyproject.toml`). The core OAK distribution remains lightweight; install with `pip install open-agent-kit[acp]` to enable editor ACP integration.
+
+> **Gotcha**: The `acp` package must be installed in the same virtual environment as OAK. If the daemon raises `ModuleNotFoundError: No module named 'acp'` at startup, verify the package is present (`pip show acp`) and that the daemon is running from the correct environment.
+
+> **Gotcha**: The `ACPIntegrations` component context provider (`AcpIntegrationContext`) is created and consumed within the same file and is not exported. Composing ACP integration state into other UI pages requires either lifting state to a shared context or extending the export surface.
+
 ## [2026-02-22]
 
 ### Added
