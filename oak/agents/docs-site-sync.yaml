@@ -64,6 +64,28 @@ default_task: |
   - Check if CLI commands, API endpoints, and config options still exist
   - Verify code examples match current implementations
 
+  **CRITICAL — Configuration snippets and code examples must come from source,
+  never from inference or memory:**
+  - CLI command syntax → read the command module (e.g. `serve_cmd.py`)
+  - JSON/YAML config shown to users → read the UI component that renders it
+    (e.g. `ACPIntegrations.tsx` contains `buildZedConfig()` — the exact JSON
+    shown in the UI and in docs must match what that function produces)
+  - API endpoint paths → read the route files under `daemon/routes/`
+  - Constants and identifiers → read `constants.py` / `constants.ts` files
+  If you cannot find the authoritative source, mark the page STALE and note
+  what needs manual verification — do not guess.
+
+  Authoritative source files by topic area:
+  - ACP: `src/open_agent_kit/features/acp_server/constants.py` (identifiers,
+    endpoint paths), `acp_server/commands/serve_cmd.py` (CLI flags),
+    `daemon/ui/src/components/agents/ACPIntegrations.tsx` (editor setup JSON),
+    `daemon/routes/acp.py` (REST API)
+  - Agents: `features/codebase_intelligence/agents/definitions/` (templates),
+    `services/agent_service.py`
+  - CLI: `src/open_agent_kit/cli.py`
+  - Config: `features/codebase_intelligence/config/`
+  - Daemon API: `features/codebase_intelligence/daemon/routes/`
+
   ## 3. Astro Check (Pre-edit Baseline)
 
   Run content validation before making changes:

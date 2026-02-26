@@ -63,9 +63,12 @@ graph TD
     subgraph "Integrations"
         Hooks[Agent Hooks] -->|Context| Daemon
         MCP[MCP Server] -->|Tools| Daemon
+        ACP[ACP Server] -->|Sessions| Daemon
         UI[Web Dashboard] -->|Manage| Daemon
     end
 ```
+
+The **[ACP Server](/open-agent-kit/features/codebase-intelligence/acp/)** integration lets ACP-compatible editors (like Zed) use OAK as a first-class coding agent — with CI built in rather than bolted on via hooks.
 
 ## Supported Agents
 
@@ -79,4 +82,8 @@ graph TD
 | **Windsurf** | Prompt only | Yes | `.windsurf/hooks.json` |
 | **Codex CLI** | Via OpenTelemetry | Yes | OTLP log events & Notify |
 
+| **OAK (ACP)** | Built-in (full) | Yes | ACP server (direct integration) |
+
 **Context injection** is what makes CI proactive — it automatically surfaces relevant memories and code search results into your agent's context. Agents with **Session + Prompt + Post-tool** injection get the richest experience: context at session start, before each prompt, and after file operations. Agents with **Prompt only** receive context before each prompt but not at session start.
+
+**OAK via ACP** is the deepest integration — CI is built into every response, not injected through hooks. See the [ACP documentation](/open-agent-kit/features/codebase-intelligence/acp/) for details.

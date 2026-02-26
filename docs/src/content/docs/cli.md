@@ -114,6 +114,16 @@ oak ci restore     # Restore from backup
 After running `oak upgrade`, run `oak ci sync` to ensure the daemon picks up any schema changes and re-indexes if needed.
 :::
 
+## Agent Client Protocol (ACP)
+
+OAK can act as a coding agent in ACP-compatible editors like Zed. See the [ACP documentation](/open-agent-kit/features/codebase-intelligence/acp/) for full details.
+
+```bash
+oak acp serve      # Start the ACP agent server (stdio transport for editors)
+```
+
+The ACP server requires the daemon to be running (`oak ci start`). It communicates with the daemon over HTTP and translates between the ACP JSON-RPC protocol and the daemon's REST API.
+
 ## Project Removal
 
 ```bash

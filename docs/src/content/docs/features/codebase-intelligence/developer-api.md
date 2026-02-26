@@ -116,6 +116,29 @@ Hook endpoints receive data from AI coding agents. The prefix is `/api/oak/ci/`.
 | `GET` | `/api/agents/settings` | Get agent settings |
 | `PUT` | `/api/agents/settings` | Update agent settings |
 
+### ACP Interactive Sessions
+
+Endpoints for the [Agent Client Protocol](/open-agent-kit/features/codebase-intelligence/acp/) integration. These manage long-lived interactive sessions between ACP-compatible editors and the OAK daemon.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/acp/sessions` | Create a new interactive session |
+| `POST` | `/api/acp/sessions/{id}/prompt` | Send a prompt (streams NDJSON execution events) |
+| `POST` | `/api/acp/sessions/{id}/cancel` | Cancel an in-progress prompt |
+| `PUT` | `/api/acp/sessions/{id}/mode` | Set permission mode (code, architect, ask) |
+| `PUT` | `/api/acp/sessions/{id}/focus` | Set agent focus (oak, documentation, analysis, engineering, maintenance) |
+| `POST` | `/api/acp/sessions/{id}/approve-plan` | Approve a proposed plan |
+| `DELETE` | `/api/acp/sessions/{id}` | Close and clean up a session |
+
+### ACP Server Management
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/acp/server/status` | Check if ACP server is running |
+| `POST` | `/api/acp/server/start` | Start the ACP server subprocess |
+| `POST` | `/api/acp/server/stop` | Stop the ACP server subprocess |
+| `GET` | `/api/acp/server/logs` | Get recent ACP server logs |
+
 ### Backup
 
 | Method | Path | Description |

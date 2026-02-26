@@ -1,17 +1,20 @@
 ---
 title: OAK Agents
-description: Autonomous agents that turn your captured development intelligence into action.
+description: OAK as an active participant — autonomous background agents and an interactive editor agent, all powered by Codebase Intelligence.
 ---
 
-OAK doesn't just capture your development story — it acts on it. **OAK Agents** are autonomous AI agents that use everything CI has learned about your project to perform real work: generating documentation enriched with actual decisions and gotchas, surfacing insights from session history, and keeping your project artifacts in sync with how your codebase actually evolved.
+OAK doesn't just capture your development story — it acts on it. This section covers the two ways OAK becomes an active participant in your workflow:
+
+- **Autonomous agents** — Background agents that run tasks on demand or on a schedule: writing documentation, generating insights, reviewing code, and maintaining the memory store. They work from the *full development record* — decisions, gotchas, session history, and semantic code search — not just the code.
+- **Interactive editor agent (ACP)** — OAK as a first-class coding agent inside editors like Zed. Every prompt gets full Codebase Intelligence built in — no hooks, no MCP configuration required.
+
+The same agent templates power both modes. When you run the Documentation Agent as a background task, it uses the same system prompt and CI access profile as the Documentation *focus* in an ACP session.
 
 They are distinct from external coding agents (Claude Code, Cursor, Codex, etc.) — those are documented in [Coding Agents](/open-agent-kit/agents/).
 
-## Why OAK Agents Matter
+## Autonomous Agents
 
-Traditional documentation and analysis tools work from code alone. OAK Agents work from the *full development record* — plans, decisions, trade-offs, gotchas, session history, and semantic code search. The result is documentation that explains *why*, not just *what*, and insights grounded in how your team actually builds software.
-
-Each agent has:
+Each autonomous agent has:
 
 - **Built-in tasks** — Pre-configured work items that ship inside the OAK package (not copied into your project)
 - **Custom task support** — Create your own tasks in `oak/agents/` (git-tracked, shareable with your team)
@@ -20,14 +23,28 @@ Each agent has:
 
 ![Agents page showing templates and task list](../../../../assets/images/agents-page.png)
 
-## Available Agents
-
 | Agent | Purpose | Built-in Tasks |
 |-------|---------|---------------|
 | **[Documentation Agent](/open-agent-kit/features/codebase-intelligence/documentation-agent/)** | Maintains project documentation using the full CI knowledge base | Root Documentation, Feature Docs, Changelog, Architecture Docs |
 | **[Analysis Agent](/open-agent-kit/features/codebase-intelligence/analysis-agent/)** | Turns CI data into actionable insights about productivity, costs, and codebase health | Usage & Cost Report, Productivity Analysis, Codebase Activity, Prompt Quality |
 | **[Engineering Agent](/open-agent-kit/features/codebase-intelligence/engineering-agent/)** | An engineering team with role-based tasks for code review, implementation, and issue triage | Senior Engineer, Product Manager |
 | **[Maintenance Agent](/open-agent-kit/features/codebase-intelligence/maintenance-agent/)** | Keeps OAK's memory store healthy — consolidates duplicates, resolves stale observations, and maintains data hygiene | Memory Consolidation, Data Hygiene |
+
+## Interactive Editor Agent (ACP)
+
+The **[Agent Client Protocol (ACP)](./acp)** integration lets ACP-compatible editors like Zed connect to OAK directly, turning it into your interactive coding agent with Codebase Intelligence built into every response.
+
+Each agent template above is available as a **focus** you can switch to mid-session — the focus determines which system prompt, tools, and CI access the agent uses, while preserving your conversation history.
+
+| Focus | Agent Template |
+|-------|---------------|
+| **Oak** (default) | Interactive coding with full CI context |
+| **Documentation** | Documentation Agent |
+| **Analysis** | Analysis Agent |
+| **Engineering** | Engineering Agent |
+| **Maintenance** | Maintenance Agent |
+
+See **[Agent Client Protocol (ACP)](./acp)** for editor setup, session modes, and how to switch focus.
 
 ## Provider Configuration
 

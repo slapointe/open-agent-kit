@@ -86,6 +86,10 @@ export default defineConfig({
               slug: "features/codebase-intelligence/agents",
             },
             {
+              label: "Agent Client Protocol (ACP)",
+              slug: "features/codebase-intelligence/acp",
+            },
+            {
               label: "Documentation Agent",
               slug: "features/codebase-intelligence/documentation-agent",
             },

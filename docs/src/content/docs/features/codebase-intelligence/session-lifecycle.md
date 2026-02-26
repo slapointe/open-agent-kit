@@ -7,6 +7,10 @@ sidebar:
 
 Sessions track all activity within an agent invocation. While the diagrams reference Claude Code, the same lifecycle applies to Cursor and Gemini via equivalent hook events.
 
+:::note[ACP sessions]
+When using OAK via the [Agent Client Protocol (ACP)](/open-agent-kit/features/codebase-intelligence/acp/), sessions follow a similar lifecycle but are managed directly by the daemon rather than through hooks. ACP sessions are created via the `/api/acp/sessions` endpoint and appear in the Activities page with agent type `oak`. The daemon handles context injection, activity recording, and summary generation internally — no hook events are fired.
+:::
+
 ## Lifecycle Overview
 
 A session flows through three layers: the **agent** fires hook events, the **daemon API** processes them, and **background jobs** handle recovery when things don't exit cleanly.

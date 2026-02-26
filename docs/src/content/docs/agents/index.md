@@ -51,6 +51,19 @@ If your team already has these files with established conventions:
 - Backups are created automatically (`.backup` extension) as a failsafe
 - Existing team conventions are preserved
 
+## ACP: OAK as a Coding Agent
+
+In addition to enriching existing agents, OAK can act as the agent itself via the **[Agent Client Protocol (ACP)](/open-agent-kit/features/codebase-intelligence/acp/)**. ACP-compatible editors like Zed connect to OAK directly, getting full Codebase Intelligence built into every response — no hooks or MCP required.
+
+```bash
+oak ci start        # Start the daemon
+oak acp serve       # Start the ACP agent server
+```
+
+The ACP integration supports **session modes** (Code, Architect, Ask) and **focus switching** between specialized agent templates (documentation, analysis, engineering, maintenance) — all within the editor's native UI.
+
+See the [ACP documentation](/open-agent-kit/features/codebase-intelligence/acp/) for setup instructions and details.
+
 ## Multi-Agent Workflows
 
 OAK supports multiple agents in the same project — ideal for teams where engineers use different tools. Select agents during `oak init` or add them incrementally by re-running `oak init`.
