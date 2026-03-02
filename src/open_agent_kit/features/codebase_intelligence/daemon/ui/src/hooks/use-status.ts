@@ -57,6 +57,18 @@ export interface UpgradeInfo {
     pending_migrations: number;
 }
 
+export interface TeamStatus {
+    configured: boolean;
+    connected: boolean;
+    members_online: number;
+}
+
+export interface CloudRelayStatus {
+    connected: boolean;
+    worker_url: string | null;
+    mcp_endpoint: string | null;
+}
+
 export interface DaemonStatus {
     status: string;
     machine_id: string | null;
@@ -75,14 +87,10 @@ export interface DaemonStatus {
     };
     storage: StorageStats;
     backup: BackupSummary;
-    tunnel: {
-        active: boolean;
-        public_url: string | null;
-        provider: string | null;
-        started_at: string | null;
-    };
     version: VersionInfo;
     upgrade: UpgradeInfo;
+    team?: TeamStatus;
+    cloud_relay?: CloudRelayStatus;
 }
 
 export function useStatus() {

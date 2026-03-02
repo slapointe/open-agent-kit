@@ -20,17 +20,10 @@ from open_agent_kit.features.codebase_intelligence.constants import (
     AUTO_RESOLVE_CONFIG_KEY,
     BACKUP_CONFIG_KEY,
     CI_CONFIG_KEY_EMBEDDING,
-    CI_CONFIG_KEY_INDEX_ON_STARTUP,
     CI_CONFIG_KEY_LOG_LEVEL,
     CI_CONFIG_KEY_LOG_ROTATION,
     CI_CONFIG_KEY_SESSION_QUALITY,
     CI_CONFIG_KEY_SUMMARIZATION,
-    CI_CONFIG_KEY_TUNNEL,
-    CI_CONFIG_KEY_WATCH_FILES,
-    CI_CONFIG_TUNNEL_KEY_AUTO_START,
-    CI_CONFIG_TUNNEL_KEY_CLOUDFLARED_PATH,
-    CI_CONFIG_TUNNEL_KEY_NGROK_PATH,
-    CI_CONFIG_TUNNEL_KEY_PROVIDER,
 )
 from open_agent_kit.features.codebase_intelligence.daemon.state import get_state
 from open_agent_kit.features.codebase_intelligence.embeddings import EmbeddingProviderChain
@@ -215,7 +208,6 @@ async def get_config() -> dict:
             "dimensions": config.embedding.get_dimensions(),
             "context_tokens": config.embedding.get_context_tokens(),
             "max_chunk_chars": config.embedding.get_max_chunk_chars(),
-            "fallback_enabled": config.embedding.fallback_enabled,
         },
         CI_CONFIG_KEY_SUMMARIZATION: {
             "enabled": config.summarization.enabled,
@@ -233,14 +225,6 @@ async def get_config() -> dict:
             "enabled": config.log_rotation.enabled,
             "max_size_mb": config.log_rotation.max_size_mb,
             "backup_count": config.log_rotation.backup_count,
-        },
-        CI_CONFIG_KEY_INDEX_ON_STARTUP: config.index_on_startup,
-        CI_CONFIG_KEY_WATCH_FILES: config.watch_files,
-        CI_CONFIG_KEY_TUNNEL: {
-            CI_CONFIG_TUNNEL_KEY_PROVIDER: config.tunnel.provider,
-            CI_CONFIG_TUNNEL_KEY_AUTO_START: config.tunnel.auto_start,
-            CI_CONFIG_TUNNEL_KEY_CLOUDFLARED_PATH: config.tunnel.cloudflared_path or "",
-            CI_CONFIG_TUNNEL_KEY_NGROK_PATH: config.tunnel.ngrok_path or "",
         },
         BACKUP_CONFIG_KEY: {
             "auto_enabled": config.backup.auto_enabled,
@@ -301,8 +285,6 @@ async def update_config(request: Request) -> dict:
             config.embedding.dimensions = emb["dimensions"]
             if old_dims != emb["dimensions"]:
                 embedding_changed = True
-        if "fallback_enabled" in emb:
-            config.embedding.fallback_enabled = emb["fallback_enabled"]
         if "context_tokens" in emb:
             config.embedding.context_tokens = emb["context_tokens"]
             embedding_changed = True
@@ -414,20 +396,8 @@ async def update_config(request: Request) -> dict:
             config.auto_resolve.search_limit = int(ar["search_limit"])
             auto_resolve_changed = True
 
-    # Update tunnel settings (nested object: { tunnel: { provider, auto_start, ... } })
-    if CI_CONFIG_KEY_TUNNEL in data and isinstance(data[CI_CONFIG_KEY_TUNNEL], dict):
-        tun = data[CI_CONFIG_KEY_TUNNEL]
-        if CI_CONFIG_TUNNEL_KEY_PROVIDER in tun:
-            config.tunnel.provider = tun[CI_CONFIG_TUNNEL_KEY_PROVIDER]
-        if CI_CONFIG_TUNNEL_KEY_AUTO_START in tun:
-            config.tunnel.auto_start = bool(tun[CI_CONFIG_TUNNEL_KEY_AUTO_START])
-        if CI_CONFIG_TUNNEL_KEY_CLOUDFLARED_PATH in tun:
-            config.tunnel.cloudflared_path = tun[CI_CONFIG_TUNNEL_KEY_CLOUDFLARED_PATH] or None
-        if CI_CONFIG_TUNNEL_KEY_NGROK_PATH in tun:
-            config.tunnel.ngrok_path = tun[CI_CONFIG_TUNNEL_KEY_NGROK_PATH] or None
-
     save_ci_config(state.project_root, config)
-    # Keep in-memory config in sync so other routes (e.g. tunnel start) see updates
+    # Keep in-memory config in sync so other routes see updates
     state.ci_config = config
     logger.info(
         f"Config saved. summarization.context_tokens = {config.summarization.context_tokens}"
@@ -462,12 +432,6 @@ async def update_config(request: Request) -> dict:
                 "enabled": config.log_rotation.enabled,
                 "max_size_mb": config.log_rotation.max_size_mb,
                 "backup_count": config.log_rotation.backup_count,
-            },
-            CI_CONFIG_KEY_TUNNEL: {
-                CI_CONFIG_TUNNEL_KEY_PROVIDER: config.tunnel.provider,
-                CI_CONFIG_TUNNEL_KEY_AUTO_START: config.tunnel.auto_start,
-                CI_CONFIG_TUNNEL_KEY_CLOUDFLARED_PATH: config.tunnel.cloudflared_path or "",
-                CI_CONFIG_TUNNEL_KEY_NGROK_PATH: config.tunnel.ngrok_path or "",
             },
             BACKUP_CONFIG_KEY: config.backup.to_dict(),
             AUTO_RESOLVE_CONFIG_KEY: config.auto_resolve.to_dict(),

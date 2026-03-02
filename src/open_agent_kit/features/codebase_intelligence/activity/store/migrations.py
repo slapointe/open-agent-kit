@@ -30,6 +30,10 @@ def apply_migrations(conn: sqlite3.Connection, from_version: int) -> None:
         _migrate_v6_to_v7(conn)
     if from_version < 8:
         _migrate_v7_to_v8(conn)
+    if from_version < 9:
+        _migrate_v8_to_v9(conn)
+    if from_version < 10:
+        _migrate_v9_to_v10(conn)
 
     # Always run idempotent column checks for the current version.
     # This catches columns added mid-development after a version was
@@ -306,6 +310,110 @@ def _migrate_v7_to_v8(conn: sqlite3.Connection) -> None:
     )
 
     logger.info("Migration v7 -> v8 complete: origin_type column added to memory_observations")
+
+
+def _migrate_v8_to_v9(conn: sqlite3.Connection) -> None:
+    """Migrate schema v8 -> v9: add relay-based team sync tables.
+
+    Creates all tables needed for relay-based team sync:
+    - team_outbox: queued observation events for push to relay
+    - team_pull_cursor: tracks last-seen cursor per relay server
+    - team_sync_state: key-value store for sync metadata
+    - team_reconcile_state: per-machine reconciliation tracking
+
+    Also cleans up stub prompt_batches and adds a unique partial index
+    on prompt_batches.content_hash for cross-machine deduplication.
+
+    Idempotent: uses CREATE TABLE/INDEX IF NOT EXISTS throughout.
+    """
+    logger.info("Migrating activity store schema v8 -> v9 (relay-based team sync)")
+
+    # --- Team outbox (queued events for push to relay) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS team_outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            source_machine_id TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            schema_version INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            retry_count INTEGER DEFAULT 0,
+            error_message TEXT
+        )
+    """)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_team_outbox_status ON team_outbox(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_team_outbox_created ON team_outbox(created_at)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_team_outbox_flush "
+        "ON team_outbox(status, retry_count, id)"
+    )
+
+    # --- Team pull cursor (tracks last-seen cursor per relay server) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS team_pull_cursor (
+            server_url TEXT PRIMARY KEY,
+            cursor_value TEXT,
+            updated_at TEXT NOT NULL
+        )
+    """)
+
+    # --- Clean up stub prompt_batches (NULL content_hash, no linked activities) ---
+    conn.execute("""
+        DELETE FROM prompt_batches
+        WHERE content_hash IS NULL
+          AND id NOT IN (
+              SELECT DISTINCT prompt_batch_id
+              FROM activities
+              WHERE prompt_batch_id IS NOT NULL
+          )
+    """)
+
+    # --- Unique partial index on prompt_batches.content_hash ---
+    conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_batches_content_hash
+        ON prompt_batches(content_hash)
+        WHERE content_hash IS NOT NULL
+    """)
+
+    # --- Team sync state (key-value store for sync metadata) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS team_sync_state (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+
+    # --- Team reconcile state (per-machine reconciliation tracking) ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS team_reconcile_state (
+            machine_id TEXT PRIMARY KEY,
+            last_reconcile_at TEXT,
+            last_hash_count INTEGER,
+            last_missing_count INTEGER
+        )
+    """)
+
+    logger.info("Migration v8 -> v9 complete: relay-based team sync tables created")
+
+
+def _migrate_v9_to_v10(conn: sqlite3.Connection) -> None:
+    """v9 -> v10: Add timeout_seconds column to agent_runs for watchdog recovery.
+
+    The watchdog previously used a hardcoded 600s default for all runs,
+    which caused premature recovery of long-running tasks (e.g. docs-site-sync
+    with 1200s timeout). Now each run stores its configured timeout so the
+    watchdog can use it.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(agent_runs)").fetchall()}
+
+    if "timeout_seconds" not in existing:
+        conn.execute("ALTER TABLE agent_runs ADD COLUMN timeout_seconds INTEGER")
+
+    logger.info("Migration v9 -> v10 complete: added timeout_seconds to agent_runs")
 
 
 def _ensure_v6_columns(conn: sqlite3.Connection) -> None:

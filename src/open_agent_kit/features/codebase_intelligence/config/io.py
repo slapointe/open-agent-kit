@@ -22,13 +22,15 @@ from open_agent_kit.features.codebase_intelligence.constants import (
     CI_CONFIG_KEY_EMBEDDING,
     CI_CONFIG_KEY_EXCLUDE_PATTERNS,
     CI_CONFIG_KEY_GOVERNANCE,
-    CI_CONFIG_KEY_INDEX_ON_STARTUP,
     CI_CONFIG_KEY_LOG_LEVEL,
     CI_CONFIG_KEY_LOG_ROTATION,
     CI_CONFIG_KEY_SESSION_QUALITY,
     CI_CONFIG_KEY_SUMMARIZATION,
-    CI_CONFIG_KEY_TUNNEL,
-    CI_CONFIG_KEY_WATCH_FILES,
+    CI_CONFIG_KEY_TEAM,
+    CI_CONFIG_TEAM_KEY_API_KEY,
+    CI_CONFIG_TEAM_KEY_AUTO_SYNC,
+    CI_CONFIG_TEAM_KEY_KEEP_RELAY_ALIVE,
+    CI_CONFIG_TEAM_KEY_SERVER_URL,
 )
 from open_agent_kit.features.codebase_intelligence.exceptions import (
     ValidationError,
@@ -180,8 +182,11 @@ USER_CLASSIFIED_PATHS: frozenset[str] = frozenset(
         f"{CI_CONFIG_KEY_AGENTS}.provider_type",  # Agent LLM backend varies per machine
         f"{CI_CONFIG_KEY_AGENTS}.provider_base_url",  # Agent LLM backend varies per machine
         f"{CI_CONFIG_KEY_AGENTS}.provider_model",  # Agent LLM backend varies per machine
-        CI_CONFIG_KEY_TUNNEL,  # Tunnel provider/paths are machine-local
         CI_CONFIG_KEY_CLOUD_RELAY,  # Cloud relay config is machine-local (token, worker URL)
+        f"{CI_CONFIG_KEY_TEAM}.{CI_CONFIG_TEAM_KEY_API_KEY}",  # Team API keys are machine-local secrets
+        f"{CI_CONFIG_KEY_TEAM}.{CI_CONFIG_TEAM_KEY_SERVER_URL}",  # Loopback or remote URL is per-machine
+        f"{CI_CONFIG_KEY_TEAM}.{CI_CONFIG_TEAM_KEY_AUTO_SYNC}",  # Depends on per-machine state
+        f"{CI_CONFIG_KEY_TEAM}.{CI_CONFIG_TEAM_KEY_KEEP_RELAY_ALIVE}",  # Per-machine power preference
         CI_CONFIG_KEY_LOG_LEVEL,  # Personal debugging preference
         CI_CONFIG_KEY_LOG_ROTATION,  # Machine-local log management
         f"{BACKUP_CONFIG_KEY}.auto_enabled",  # Personal preference for auto-backup
@@ -261,6 +266,69 @@ def _split_by_classification(
             project_dict[key] = value
 
     return user_dict, project_dict
+
+
+def _scrub_dead_keys(ci_dict: dict[str, Any]) -> None:
+    """Remove known dead/inert config keys from a CI config dict **in place**.
+
+    These keys were once stored but are no longer read by any code path.
+    Removing them on save keeps .oak/config.yaml clean and avoids user confusion.
+    """
+    # Top-level dead keys
+    for key in ("tunnel", "index_on_startup", "watch_files"):
+        ci_dict.pop(key, None)
+
+    # embedding.fallback_enabled
+    emb = ci_dict.get("embedding")
+    if isinstance(emb, dict):
+        emb.pop("fallback_enabled", None)
+
+    # Dead team sub-keys
+    team = ci_dict.get("team")
+    if isinstance(team, dict):
+        for key in (
+            "pull_interval_seconds",
+            "transport",
+            "bind_host",
+            "bind_port",
+            "server_side_llm",
+        ):
+            team.pop(key, None)
+
+    # Dead governance.data_collection sub-keys
+    gov = ci_dict.get("governance")
+    if isinstance(gov, dict):
+        dc = gov.get("data_collection")
+        if isinstance(dc, dict):
+            for key in (
+                "collect_activities",
+                "collect_prompts",
+                "sync_activities",
+                "sync_prompts",
+                "allow_server_llm",
+            ):
+                dc.pop(key, None)
+
+
+def _scrub_user_keys_from_project(ci_dict: dict[str, Any]) -> None:
+    """Remove user-classified sub-keys from a project config dict **in place**.
+
+    After reclassifying fields (e.g. moving ``team.auto_sync`` from
+    project to user), stale values linger in the shared config because
+    ``_deep_merge`` only adds/overwrites. This function removes them.
+
+    Only scrubs **dotted paths** (sub-keys within mixed sections). Entire
+    user-classified sections (bare names like ``embedding``) are left
+    alone — they may contain team defaults set via ``force_project``.
+    """
+    for path in USER_CLASSIFIED_PATHS:
+        if "." not in path:
+            # Entire section — leave it; may hold team defaults
+            continue
+        section, leaf = path.split(".", 1)
+        sub = ci_dict.get(section)
+        if isinstance(sub, dict):
+            sub.pop(leaf, None)
 
 
 def _user_config_path(project_root: Path) -> Path:
@@ -406,9 +474,14 @@ def save_ci_config(
             logger.warning(f"Failed to read existing config: {e}")
 
     ci_dict = config.to_dict()
+    # Hard-scrub legacy team.token from project config output.
+    team_dict = ci_dict.get(CI_CONFIG_KEY_TEAM)
+    if isinstance(team_dict, dict):
+        team_dict.pop("token", None)
 
     if force_project:
         # Write everything to project config as team baseline
+        _scrub_dead_keys(ci_dict)
         existing_config["codebase_intelligence"] = ci_dict
         _write_yaml_config(config_file, existing_config)
         logger.info(f"Saved full CI config to project file {config_file}")
@@ -423,6 +496,15 @@ def save_ci_config(
             existing_config["codebase_intelligence"] = _deep_merge(existing_ci, project_keys)
         else:
             existing_config["codebase_intelligence"] = project_keys
+        existing_ci_section = existing_config.get("codebase_intelligence")
+        if isinstance(existing_ci_section, dict):
+            # Remove user-classified keys that may have been written
+            # before they were reclassified (e.g. team.auto_sync).
+            _scrub_user_keys_from_project(existing_ci_section)
+            _scrub_dead_keys(existing_ci_section)
+            existing_team = existing_ci_section.get(CI_CONFIG_KEY_TEAM)
+            if isinstance(existing_team, dict):
+                existing_team.pop("token", None)
         _write_yaml_config(config_file, existing_config)
 
         # Write user keys to .oak/config.{machine_id}.yaml
@@ -487,13 +569,10 @@ def get_config_origins(project_root: Path) -> dict[str, str]:
         CI_CONFIG_KEY_SUMMARIZATION,
         CI_CONFIG_KEY_AGENTS,
         CI_CONFIG_KEY_SESSION_QUALITY,
-        CI_CONFIG_KEY_TUNNEL,
         CI_CONFIG_KEY_CLOUD_RELAY,
         BACKUP_CONFIG_KEY,
         AUTO_RESOLVE_CONFIG_KEY,
         CI_CONFIG_KEY_GOVERNANCE,
-        CI_CONFIG_KEY_INDEX_ON_STARTUP,
-        CI_CONFIG_KEY_WATCH_FILES,
         CI_CONFIG_KEY_EXCLUDE_PATTERNS,
         CI_CONFIG_KEY_CLI_COMMAND,
         CI_CONFIG_KEY_LOG_LEVEL,

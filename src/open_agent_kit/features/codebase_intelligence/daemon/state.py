@@ -46,7 +46,21 @@ if TYPE_CHECKING:
     from open_agent_kit.features.codebase_intelligence.indexing.watcher import FileWatcher
     from open_agent_kit.features.codebase_intelligence.memory.store import VectorStore
     from open_agent_kit.features.codebase_intelligence.retrieval.engine import RetrievalEngine
-    from open_agent_kit.features.codebase_intelligence.tunnel.base import TunnelProvider
+    from open_agent_kit.features.codebase_intelligence.team.outbox.worker import ObsFlushWorker
+
+
+@dataclass
+class RelayCredentials:
+    """Cached credentials for reconnecting the cloud relay after wake.
+
+    Captures the exact parameters used for the active connection so
+    reconnect does not depend on config (which may have changed).
+    """
+
+    worker_url: str
+    token: str
+    daemon_port: int
+    machine_id: str
 
 
 @dataclass
@@ -191,8 +205,6 @@ class DaemonState:
     last_auto_backup: float | None = None
     # Authentication token for API security (set from OAK_CI_TOKEN env var)
     auth_token: str | None = None
-    # Tunnel sharing
-    tunnel_provider: "TunnelProvider | None" = None
     # Cloud MCP Relay
     cloud_relay_client: "RelayClient | None" = None
     cf_account_name: str | None = None
@@ -212,6 +224,10 @@ class DaemonState:
     last_hook_activity: float | None = None  # epoch of last hook event
     power_state: str = POWER_STATE_ACTIVE  # current power state
     _power_state_lock: RLock = field(default_factory=RLock, init=False, repr=False)
+    # Team sync
+    team_sync_worker: "ObsFlushWorker | None" = None
+    # Cached relay credentials for reconnecting after power wake
+    _relay_credentials: RelayCredentials | None = field(default=None, init=False, repr=False)
 
     def initialize(self, project_root: Path) -> None:
         """Initialize daemon state for startup.
@@ -399,10 +415,10 @@ class DaemonState:
         return False
 
     def add_cors_origin(self, origin: str) -> None:
-        """Add a dynamic CORS origin (e.g. tunnel URL).
+        """Add a dynamic CORS origin (e.g. cloud relay URL).
 
         Args:
-            origin: Origin URL to allow (e.g. "https://xxx.trycloudflare.com").
+            origin: Origin URL to allow (e.g. "https://relay.example.com").
         """
         with self._cors_lock:
             self._dynamic_cors_origins.add(origin)
@@ -508,6 +524,32 @@ class DaemonState:
             self.index_status.set_error()
             return None
 
+    def cache_relay_credentials(
+        self,
+        worker_url: str,
+        token: str,
+        daemon_port: int,
+        machine_id: str,
+    ) -> None:
+        """Store relay credentials for reconnecting after power wake.
+
+        Args:
+            worker_url: Cloudflare Worker URL.
+            token: Shared authentication token.
+            daemon_port: Port the daemon is listening on.
+            machine_id: Deterministic machine identifier.
+        """
+        self._relay_credentials = RelayCredentials(
+            worker_url=worker_url,
+            token=token,
+            daemon_port=daemon_port,
+            machine_id=machine_id,
+        )
+
+    def clear_relay_credentials(self) -> None:
+        """Clear cached relay credentials (e.g. on explicit disconnect or leave)."""
+        self._relay_credentials = None
+
     def record_hook_activity(self) -> None:
         """Record that a hook event occurred. Thread-safe."""
         import time
@@ -533,6 +575,56 @@ class DaemonState:
             self.activity_processor.schedule_background_processing(
                 state_accessor=lambda: self,
             )
+        self._restart_team_subsystems_on_wake()
+
+    def _restart_team_subsystems_on_wake(self) -> None:
+        """Restart team subsystems (sync worker + relay) after power wake.
+
+        Called from ``_wake_from_deep_sleep()`` and from
+        ``on_power_transition()`` when transitioning back to ACTIVE.
+        """
+        import logging
+
+        from open_agent_kit.features.codebase_intelligence.constants.team import (
+            TEAM_LOG_RELAY_POWER_RECONNECT,
+            TEAM_LOG_SYNC_WORKER_POWER_RESTART,
+        )
+
+        logger = logging.getLogger(__name__)
+
+        # Restart sync worker if it was stopped
+        if self.team_sync_worker is not None:
+            try:
+                self.team_sync_worker.start()
+                logger.info(TEAM_LOG_SYNC_WORKER_POWER_RESTART)
+            except (RuntimeError, OSError) as e:
+                logger.warning("Failed to restart team sync worker: %s", e)
+
+        # Reconnect relay if we have cached credentials
+        if self._relay_credentials is not None and self.cloud_relay_client is None:
+            creds = self._relay_credentials
+            logger.info(TEAM_LOG_RELAY_POWER_RECONNECT)
+            try:
+                from open_agent_kit.features.codebase_intelligence.cloud_relay.client import (
+                    CloudRelayClient,
+                )
+
+                client = CloudRelayClient()
+                self.cloud_relay_client = client
+
+                # Schedule the async connect in the running event loop
+                loop = asyncio.get_event_loop()
+                asyncio.ensure_future(
+                    client.connect(
+                        creds.worker_url,
+                        creds.token,
+                        creds.daemon_port,
+                        machine_id=creds.machine_id,
+                    ),
+                    loop=loop,
+                )
+            except (RuntimeError, OSError) as e:
+                logger.warning("Failed to reconnect cloud relay: %s", e)
 
     def reset(self) -> None:
         """Reset state for testing or restart."""
@@ -562,7 +654,6 @@ class DaemonState:
         self.interactive_session_manager = None
         self.last_auto_backup = None
         self.auth_token = None
-        self.tunnel_provider = None
         self.cloud_relay_client = None
         self.cf_account_name = None
         self.acp_server_pid = None
@@ -575,6 +666,8 @@ class DaemonState:
         self.pending_migration_count = 0
         self.last_hook_activity = None
         self.power_state = POWER_STATE_ACTIVE
+        self.team_sync_worker = None
+        self._relay_credentials = None
 
 
 # Global daemon state instance

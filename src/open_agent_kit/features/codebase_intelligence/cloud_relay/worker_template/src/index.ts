@@ -4,10 +4,11 @@
  * Routes:
  *   POST /mcp    — cloud agents send MCP JSON-RPC requests (agent_token auth)
  *   GET  /ws     — local Oak CI daemon connects WebSocket (relay_token auth)
+ *   POST /search — federated search fan-out to connected peers (relay_token auth)
  *   GET  /health — status check
  */
 
-import { validateAgentToken, validateRelayToken } from "./auth";
+import { validateAgentToken, validateRelayToken, validateRelayTokenHttp } from "./auth";
 import { handleMcpRequest } from "./mcp-handler";
 import type { Env } from "./types";
 
@@ -70,6 +71,47 @@ export default {
       const authErr = validateRelayToken(request, env);
       if (authErr) return authErr;
 
+      const doStub = getDurableObject(env);
+      return doStub.fetch(request);
+    }
+
+    // ----- /api/team/* — HTTP proxy to local daemon via Durable Object -----
+    if (path.startsWith("/api/team/")) {
+      const authErr = validateRelayTokenHttp(request, env);
+      if (authErr) return withCors(authErr);
+
+      const doStub = getDurableObject(env);
+      return withCors(await doStub.fetch(request));
+    }
+
+    // ----- GET /obs/pending — drain buffered obs for a reconnecting node -----
+    if (path === "/obs/pending" && request.method === "GET") {
+      const authErr = validateRelayTokenHttp(request, env);
+      if (authErr) return authErr;
+      const doStub = getDurableObject(env);
+      return doStub.fetch(request);
+    }
+
+    // ----- POST /search — federated search fan-out to connected peers -----
+    if (path === "/search" && request.method === "POST") {
+      const authErr = validateRelayTokenHttp(request, env);
+      if (authErr) return authErr;
+      const doStub = getDurableObject(env);
+      return withCors(await doStub.fetch(request));
+    }
+
+    // ----- GET /obs/history — historical obs for new-node catch-up -----
+    if (path === "/obs/history" && request.method === "GET") {
+      const authErr = validateRelayTokenHttp(request, env);
+      if (authErr) return authErr;
+      const doStub = getDurableObject(env);
+      return doStub.fetch(request);
+    }
+
+    // ----- GET /obs/stats — pending obs counts per offline node -----
+    if (path === "/obs/stats" && request.method === "GET") {
+      const authErr = validateRelayTokenHttp(request, env);
+      if (authErr) return authErr;
       const doStub = getDurableObject(env);
       return doStub.fetch(request);
     }

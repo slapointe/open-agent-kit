@@ -7,10 +7,14 @@ orchestrator. Init order is load-bearing:
 
 import asyncio
 import logging
+import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from open_agent_kit.features.codebase_intelligence.config.governance import DataCollectionPolicy
 
 from fastapi import FastAPI
 
@@ -24,11 +28,6 @@ from open_agent_kit.features.codebase_intelligence.constants import (
     CI_CLOUD_RELAY_LOG_CONNECTED,
     CI_DATA_DIR,
     CI_LOG_FILE,
-    CI_TUNNEL_ERROR_START_UNKNOWN,
-    CI_TUNNEL_LOG_ACTIVE,
-    CI_TUNNEL_LOG_AUTO_START,
-    CI_TUNNEL_LOG_AUTO_START_FAILED,
-    CI_TUNNEL_LOG_AUTO_START_UNAVAILABLE,
     SHUTDOWN_TASK_TIMEOUT_SECONDS,
 )
 from open_agent_kit.features.codebase_intelligence.daemon.state import get_state
@@ -42,62 +41,31 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _init_tunnel(state: "DaemonState", project_root: Path) -> None:
-    """Auto-start tunnel if configured.
-
-    Non-critical: failures are logged but do not prevent startup.
-    """
-    ci_config = state.ci_config
-    if not ci_config or not ci_config.tunnel.auto_start:
-        return
-
-    from open_agent_kit.features.codebase_intelligence.daemon.manager import (
-        get_project_port,
-    )
-    from open_agent_kit.features.codebase_intelligence.tunnel.factory import (
-        create_tunnel_provider,
-    )
-
-    logger.info(CI_TUNNEL_LOG_AUTO_START)
-    try:
-        provider = create_tunnel_provider(
-            provider=ci_config.tunnel.provider,
-            cloudflared_path=ci_config.tunnel.cloudflared_path,
-            ngrok_path=ci_config.tunnel.ngrok_path,
-        )
-        if not provider.is_available:
-            logger.warning(CI_TUNNEL_LOG_AUTO_START_UNAVAILABLE.format(provider=provider.name))
-            return
-
-        ci_data_dir = project_root / OAK_DIR / CI_DATA_DIR
-        port = get_project_port(project_root, ci_data_dir)
-        status = provider.start(port)
-        if status.active and status.public_url:
-            state.tunnel_provider = provider
-            state.add_cors_origin(status.public_url)
-            logger.info(CI_TUNNEL_LOG_ACTIVE.format(public_url=status.public_url))
-        else:
-            error_detail = status.error or CI_TUNNEL_ERROR_START_UNKNOWN
-            logger.warning(CI_TUNNEL_LOG_AUTO_START_FAILED.format(error=error_detail))
-    except (OSError, ValueError, RuntimeError) as e:
-        logger.warning(CI_TUNNEL_LOG_AUTO_START_FAILED.format(error=e))
-
-
 async def _init_cloud_relay(state: "DaemonState", project_root: Path) -> None:
     """Auto-connect cloud relay if configured.
 
+    Supports two modes:
+    - Publisher: cloud_relay.auto_connect=True (set after successful deploy).
+    - Consumer: team.auto_sync=True with relay_worker_url + api_key configured.
+
     Non-critical: failures are logged but do not prevent startup.
     """
     ci_config = state.ci_config
-    if not ci_config or not ci_config.cloud_relay.auto_connect:
+    if not ci_config:
         return
 
     relay_config = ci_config.cloud_relay
-    if not relay_config.worker_url:
-        logger.debug("Cloud relay auto-connect skipped: no worker_url configured")
-        return
-    if not relay_config.token:
-        logger.debug("Cloud relay auto-connect skipped: no token configured")
+    team_config = ci_config.team
+
+    # Publisher path: relay was deployed by this node
+    if relay_config.auto_connect and relay_config.worker_url and relay_config.token:
+        worker_url = relay_config.worker_url
+        token = relay_config.token
+    # Consumer path: team relay configured manually (teammate's Worker)
+    elif team_config.auto_sync and team_config.relay_worker_url and team_config.api_key:
+        worker_url = team_config.relay_worker_url
+        token = team_config.api_key
+    else:
         return
 
     from open_agent_kit.features.codebase_intelligence.daemon.manager import (
@@ -106,22 +74,27 @@ async def _init_cloud_relay(state: "DaemonState", project_root: Path) -> None:
 
     logger.info(CI_CLOUD_RELAY_LOG_AUTO_CONNECT)
     try:
+        from open_agent_kit.features.codebase_intelligence.activity.store.backup import (
+            get_machine_identifier,
+        )
         from open_agent_kit.features.codebase_intelligence.cloud_relay.client import (
             CloudRelayClient,
         )
 
         ci_data_dir = project_root / OAK_DIR / CI_DATA_DIR
         port = get_project_port(project_root, ci_data_dir)
+        machine_id = get_machine_identifier(project_root)
 
         client = CloudRelayClient(
             tool_timeout_seconds=relay_config.tool_timeout_seconds,
             reconnect_max_seconds=relay_config.reconnect_max_seconds,
         )
-        relay_status = await client.connect(relay_config.worker_url, relay_config.token, port)
+        relay_status = await client.connect(worker_url, token, port, machine_id=machine_id)
         state.cloud_relay_client = client
 
         if relay_status.connected:
-            logger.info(CI_CLOUD_RELAY_LOG_CONNECTED.format(worker_url=relay_config.worker_url))
+            logger.info(CI_CLOUD_RELAY_LOG_CONNECTED.format(worker_url=worker_url))
+            state.cache_relay_credentials(worker_url, token, port, machine_id)
         else:
             error_detail = relay_status.error or CI_CLOUD_RELAY_ERROR_CONNECT_FAILED.format(
                 error="unknown"
@@ -323,8 +296,7 @@ async def _init_activity(state: "DaemonState", project_root: Path) -> None:
             state_accessor=lambda: state,
         )
         logger.info(
-            f"Activity processor initialized with background scheduling "
-            f"(interval={bg_interval}s)"
+            f"Activity processor initialized with background scheduling (interval={bg_interval}s)"
         )
 
 
@@ -384,6 +356,71 @@ def _init_agents(state: "DaemonState", project_root: Path) -> None:
         state.agent_scheduler.start()
 
 
+def _init_team_sync(state: "DaemonState") -> None:
+    """Initialize team outbox sync if configured.
+
+    Enables outbox writes in the activity store and starts the background
+    obs flush worker that pushes observations via the cloud relay.
+    Non-critical: failures are logged but do not prevent startup.
+    """
+    ci_config = state.ci_config
+    if not ci_config or not ci_config.team.auto_sync:
+        return
+    if not state.activity_store:
+        logger.debug("Team sync skipped: no activity store")
+        return
+
+    # Enable outbox writes in the store (atomic with data writes)
+    state.activity_store.team_outbox_enabled = True
+
+    # Wire policy accessor so outbox hooks can check data collection policy
+    def _policy_accessor() -> "DataCollectionPolicy":
+        from open_agent_kit.features.codebase_intelligence.config.governance import (
+            DataCollectionPolicy,
+        )
+        from open_agent_kit.features.codebase_intelligence.daemon.state import get_state
+
+        s = get_state()
+        if s.ci_config and s.ci_config.governance:
+            return s.ci_config.governance.data_collection
+        return DataCollectionPolicy()
+
+    state.activity_store._team_policy_accessor = _policy_accessor
+
+    from open_agent_kit.features.codebase_intelligence.team.identity import (
+        get_project_identity,
+    )
+    from open_agent_kit.features.codebase_intelligence.team.outbox.worker import (
+        ObsFlushWorker,
+    )
+
+    project_id = (
+        get_project_identity(state.project_root).full_id if state.project_root else "unknown"
+    )
+
+    # Start obs flush worker (flushes outbox via cloud relay)
+    worker = ObsFlushWorker(
+        store=state.activity_store,
+        config=ci_config.team,
+        project_id=project_id,
+    )
+    # Relay client will be set when the cloud relay connects
+    if state.cloud_relay_client is not None:
+        worker.set_relay_client(state.cloud_relay_client)
+
+        # Wire obs applier so incoming peer observations are applied locally
+        from open_agent_kit.features.codebase_intelligence.team.sync.obs_applier import (
+            RemoteObsApplier,
+        )
+
+        applier = RemoteObsApplier(state.activity_store)
+        state.cloud_relay_client.set_obs_applier(applier)
+
+    worker.start()
+    state.team_sync_worker = worker
+    logger.info("Obs flush worker started")
+
+
 async def _shutdown(state: "DaemonState") -> None:
     """Graceful shutdown sequence for all subsystems."""
     logger.info("Initiating graceful shutdown...")
@@ -423,20 +460,17 @@ async def _shutdown(state: "DaemonState") -> None:
         finally:
             state.agent_scheduler = None
 
-    # 4. Stop tunnel if active
-    if state.tunnel_provider:
-        logger.info("Stopping tunnel...")
+    # 5. Stop team sync worker
+    if state.team_sync_worker:
+        logger.info("Stopping team sync worker...")
         try:
-            status = state.tunnel_provider.get_status()
-            if status.public_url:
-                state.remove_cors_origin(status.public_url)
-            state.tunnel_provider.stop()
+            state.team_sync_worker.stop()
         except (RuntimeError, OSError) as e:
-            logger.warning(f"Error stopping tunnel: {e}")
+            logger.warning(f"Error stopping team sync worker: {e}")
         finally:
-            state.tunnel_provider = None
+            state.team_sync_worker = None
 
-    # 4b. Disconnect cloud relay if connected
+    # 6. Disconnect cloud relay if connected
     if state.cloud_relay_client:
         logger.info("Disconnecting cloud relay...")
         try:
@@ -446,7 +480,7 @@ async def _shutdown(state: "DaemonState") -> None:
         finally:
             state.cloud_relay_client = None
 
-    # 5. Stop file watcher and wait for thread cleanup
+    # 7. Stop file watcher and wait for thread cleanup
     if state.file_watcher:
         logger.info("Stopping file watcher...")
         try:
@@ -512,7 +546,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     initialize_redaction(ci_data_dir)
 
     # --- Subsystem init (order matters: embedding -> vector store -> activity -> agents) ---
-    _init_tunnel(state, project_root)
+
+    # One-time migration: move legacy git-tracked scaffold to .oak/ci/cloud-relay
+    from open_agent_kit.features.codebase_intelligence.cloud_relay.scaffold import (
+        migrate_scaffold_dir,
+    )
+
+    migrate_scaffold_dir(project_root)
+
     await _init_cloud_relay(state, project_root)
 
     provider_available = _init_embedding(state, project_root)
@@ -522,7 +563,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         try:
             await _init_activity(state, project_root)
-        except (OSError, ValueError, RuntimeError) as e:
+        except (OSError, ValueError, RuntimeError, sqlite3.Error) as e:
             logger.warning(f"Failed to initialize activity store: {e}")
             state.activity_store = None
             state.activity_processor = None
@@ -560,10 +601,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except (OSError, ValueError, RuntimeError) as e:
             logger.warning(f"Failed to initialize interactive session manager: {e}")
 
-    except (OSError, ValueError, RuntimeError) as e:
+    except (OSError, ValueError, RuntimeError, sqlite3.Error) as e:
         logger.warning(f"Failed to initialize: {e}")
         state.vector_store = None
         state.indexer = None
+
+    # Team sync: start outbox sync worker
+    try:
+        _init_team_sync(state)
+    except (OSError, ValueError, RuntimeError, sqlite3.Error) as e:
+        logger.warning(f"Failed to initialize team sync: {e}")
 
     # Run one immediate version + upgrade check, then launch periodic loop
     check_version(state)

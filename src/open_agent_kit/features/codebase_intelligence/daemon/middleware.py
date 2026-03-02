@@ -1,7 +1,7 @@
 """Middleware for the CI daemon.
 
 Includes:
-- DynamicCORSMiddleware: Runtime-configurable CORS for tunnel URLs.
+- DynamicCORSMiddleware: Runtime-configurable CORS for dynamic origins (e.g. cloud relay).
 - TokenAuthMiddleware: Bearer token authentication for /api/* routes.
 - RequestSizeLimitMiddleware: Content-Length enforcement to prevent memory exhaustion.
 """
@@ -74,7 +74,7 @@ class DynamicCORSMiddleware(CORSMiddleware):
     """CORS middleware that checks both static and dynamic origins.
 
     Static origins (localhost) are configured at startup via the parent class.
-    Dynamic origins (tunnel URLs) are read from DaemonState at request time.
+    Dynamic origins (e.g. cloud relay URLs) are read from DaemonState at request time.
     """
 
     def __init__(
@@ -114,7 +114,7 @@ class DynamicCORSMiddleware(CORSMiddleware):
         if origin in self._static_origins:
             return True
 
-        # Check dynamic origins (tunnel URLs)
+        # Check dynamic origins (cloud relay URLs)
         dynamic_origins = get_state().get_dynamic_cors_origins()
         return origin in dynamic_origins
 
@@ -262,9 +262,22 @@ class TokenAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Extract and validate Authorization header
+        # Extract the daemon auth token.
+        # Relay-proxied requests set X-Oak-Source: relay and carry daemon
+        # auth in X-Oak-Daemon-Auth (so Authorization can carry the team
+        # API key). Direct requests use the standard Authorization header.
+        from open_agent_kit.features.codebase_intelligence.constants import (
+            CI_RELAY_DAEMON_AUTH_HEADER,
+            CI_RELAY_SOURCE_HEADER,
+            CI_RELAY_SOURCE_VALUE,
+        )
+
         headers = Headers(scope=scope)
-        auth_value = headers.get(CI_AUTH_HEADER_NAME)
+        source = headers.get(CI_RELAY_SOURCE_HEADER)
+        if source == CI_RELAY_SOURCE_VALUE:
+            auth_value = headers.get(CI_RELAY_DAEMON_AUTH_HEADER)
+        else:
+            auth_value = headers.get(CI_AUTH_HEADER_NAME)
 
         if not auth_value:
             await _send_json_error(send, HTTPStatus.UNAUTHORIZED, CI_AUTH_ERROR_MISSING)
@@ -281,6 +294,45 @@ class TokenAuthMiddleware:
             return
 
         # Token valid — proceed
+        await self.app(scope, receive, send)
+
+
+# Prefixes exempt from activity tracking (health/status endpoints that
+# may be polled by monitoring and should not reset the idle timer).
+_ACTIVITY_TRACKING_EXEMPT_PREFIXES: tuple[str, ...] = (
+    "/api/health",
+    "/api/status",
+)
+
+
+class ActivityTrackingMiddleware:
+    """ASGI middleware that records UI activity for power state management.
+
+    On any authenticated ``/api/*`` request (excluding health/status
+    endpoints), calls ``record_hook_activity()`` on DaemonState. This
+    resets the idle timer and wakes the daemon from deep sleep when a
+    user is actively browsing the dashboard.
+
+    Placed as the **innermost** middleware so it runs after auth —
+    only authenticated requests count as genuine activity.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != CI_CORS_SCOPE_HTTP:
+            await self.app(scope, receive, send)
+            return
+
+        path: str = scope.get("path", "")
+
+        # Only track /api/* requests, excluding health/status
+        if path.startswith("/api/"):
+            exempt = any(path.startswith(p) for p in _ACTIVITY_TRACKING_EXEMPT_PREFIXES)
+            if not exempt:
+                get_state().record_hook_activity()
+
         await self.app(scope, receive, send)
 
 

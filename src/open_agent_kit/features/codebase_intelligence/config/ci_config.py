@@ -12,7 +12,6 @@ from open_agent_kit.features.codebase_intelligence.config.infrastructure import 
     BackupConfig,
     CloudRelayConfig,
     LogRotationConfig,
-    TunnelConfig,
 )
 from open_agent_kit.features.codebase_intelligence.config.io import DEFAULT_EXCLUDE_PATTERNS
 from open_agent_kit.features.codebase_intelligence.config.session import (
@@ -20,6 +19,7 @@ from open_agent_kit.features.codebase_intelligence.config.session import (
     SessionQualityConfig,
 )
 from open_agent_kit.features.codebase_intelligence.config.summarization import SummarizationConfig
+from open_agent_kit.features.codebase_intelligence.config.team import TeamConfig
 from open_agent_kit.features.codebase_intelligence.constants import (
     AUTO_RESOLVE_CONFIG_KEY,
     BACKUP_CONFIG_KEY,
@@ -31,13 +31,11 @@ from open_agent_kit.features.codebase_intelligence.constants import (
     CI_CONFIG_KEY_EMBEDDING,
     CI_CONFIG_KEY_EXCLUDE_PATTERNS,
     CI_CONFIG_KEY_GOVERNANCE,
-    CI_CONFIG_KEY_INDEX_ON_STARTUP,
     CI_CONFIG_KEY_LOG_LEVEL,
     CI_CONFIG_KEY_LOG_ROTATION,
     CI_CONFIG_KEY_SESSION_QUALITY,
     CI_CONFIG_KEY_SUMMARIZATION,
-    CI_CONFIG_KEY_TUNNEL,
-    CI_CONFIG_KEY_WATCH_FILES,
+    CI_CONFIG_KEY_TEAM,
     LOG_LEVEL_DEBUG,
     LOG_LEVEL_INFO,
     VALID_LOG_LEVELS,
@@ -56,13 +54,11 @@ class CIConfig:
         summarization: LLM summarization configuration.
         agents: Agent subsystem configuration.
         session_quality: Session quality threshold configuration.
-        tunnel: Tunnel sharing configuration.
         cloud_relay: Cloud MCP Relay configuration.
+        team: Oak Teams sync configuration.
         backup: Backup behavior configuration.
         auto_resolve: Auto-resolve (supersession) configuration.
         governance: Agent governance (observability and enforcement) configuration.
-        index_on_startup: Whether to build index when daemon starts.
-        watch_files: Whether to watch files for changes.
         exclude_patterns: Glob patterns to exclude from indexing.
         cli_command: CLI executable used for CI-managed integrations.
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR).
@@ -73,13 +69,11 @@ class CIConfig:
     summarization: SummarizationConfig = field(default_factory=SummarizationConfig)
     agents: AgentConfig = field(default_factory=AgentConfig)
     session_quality: SessionQualityConfig = field(default_factory=SessionQualityConfig)
-    tunnel: TunnelConfig = field(default_factory=TunnelConfig)
     cloud_relay: CloudRelayConfig = field(default_factory=CloudRelayConfig)
+    team: TeamConfig = field(default_factory=TeamConfig)
     backup: BackupConfig = field(default_factory=BackupConfig)
     auto_resolve: AutoResolveConfig = field(default_factory=AutoResolveConfig)
     governance: GovernanceConfig = field(default_factory=GovernanceConfig)
-    index_on_startup: bool = True
-    watch_files: bool = True
     exclude_patterns: list[str] = field(default_factory=lambda: DEFAULT_EXCLUDE_PATTERNS.copy())
     cli_command: str = CI_CLI_COMMAND_DEFAULT
     log_level: str = LOG_LEVEL_INFO
@@ -137,8 +131,8 @@ class CIConfig:
         summarization_data = data.get(CI_CONFIG_KEY_SUMMARIZATION, {})
         agents_data = data.get(CI_CONFIG_KEY_AGENTS, {})
         session_quality_data = data.get(CI_CONFIG_KEY_SESSION_QUALITY, {})
-        tunnel_data = data.get(CI_CONFIG_KEY_TUNNEL, {})
         cloud_relay_data = data.get(CI_CONFIG_KEY_CLOUD_RELAY, {})
+        team_data = data.get(CI_CONFIG_KEY_TEAM, {})
         backup_data = data.get(BACKUP_CONFIG_KEY, {})
         auto_resolve_data = data.get(AUTO_RESOLVE_CONFIG_KEY, {})
         governance_data = data.get(CI_CONFIG_KEY_GOVERNANCE, {})
@@ -148,13 +142,11 @@ class CIConfig:
             summarization=SummarizationConfig.from_dict(summarization_data),
             agents=AgentConfig.from_dict(agents_data),
             session_quality=SessionQualityConfig.from_dict(session_quality_data),
-            tunnel=TunnelConfig.from_dict(tunnel_data),
             cloud_relay=CloudRelayConfig.from_dict(cloud_relay_data),
+            team=TeamConfig.from_dict(team_data),
             backup=BackupConfig.from_dict(backup_data),
             auto_resolve=AutoResolveConfig.from_dict(auto_resolve_data),
             governance=GovernanceConfig.from_dict(governance_data),
-            index_on_startup=data.get(CI_CONFIG_KEY_INDEX_ON_STARTUP, True),
-            watch_files=data.get(CI_CONFIG_KEY_WATCH_FILES, True),
             exclude_patterns=data.get(
                 CI_CONFIG_KEY_EXCLUDE_PATTERNS, DEFAULT_EXCLUDE_PATTERNS.copy()
             ),
@@ -170,13 +162,11 @@ class CIConfig:
             CI_CONFIG_KEY_SUMMARIZATION: self.summarization.to_dict(),
             CI_CONFIG_KEY_AGENTS: self.agents.to_dict(),
             CI_CONFIG_KEY_SESSION_QUALITY: self.session_quality.to_dict(),
-            CI_CONFIG_KEY_TUNNEL: self.tunnel.to_dict(),
             CI_CONFIG_KEY_CLOUD_RELAY: self.cloud_relay.to_dict(),
+            CI_CONFIG_KEY_TEAM: self.team.to_dict(),
             BACKUP_CONFIG_KEY: self.backup.to_dict(),
             AUTO_RESOLVE_CONFIG_KEY: self.auto_resolve.to_dict(),
             CI_CONFIG_KEY_GOVERNANCE: self.governance.to_dict(),
-            CI_CONFIG_KEY_INDEX_ON_STARTUP: self.index_on_startup,
-            CI_CONFIG_KEY_WATCH_FILES: self.watch_files,
             CI_CONFIG_KEY_EXCLUDE_PATTERNS: self.exclude_patterns,
             CI_CONFIG_KEY_CLI_COMMAND: self.cli_command,
             CI_CONFIG_KEY_LOG_LEVEL: self.log_level,

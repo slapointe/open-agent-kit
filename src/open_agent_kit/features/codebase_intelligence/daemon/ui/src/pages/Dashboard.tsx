@@ -4,7 +4,7 @@ import { StatCard, StatusDot, StatusBadge } from "@/components/ui/config-compone
 import { useStatus } from "@/hooks/use-status";
 import { useSessions, type SessionItem } from "@/hooks/use-activity";
 import { usePlans } from "@/hooks/use-plans";
-import { Check, FileCode, Brain, Clock, Activity, Terminal, ArrowRight, ClipboardList, Layers, HardDrive, Save, Share2 } from "lucide-react";
+import { Check, FileCode, Brain, Clock, Activity, Terminal, ArrowRight, ClipboardList, Layers, HardDrive, Save, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
     formatRelativeTime,
@@ -278,22 +278,27 @@ export default function Dashboard() {
                                 </span>
                             </div>
 
-                            {/* Tunnel Sharing */}
+                            {/* Team Status */}
                             <div className="flex items-center justify-between">
                                 <span className="text-sm text-muted-foreground flex items-center gap-1">
-                                    <Share2 className="w-3 h-3" />
-                                    <Link to="/team/sharing" className="hover:underline">Sharing</Link>
+                                    <Server className="w-3 h-3" />
+                                    <Link to="/team" className="hover:underline">Team</Link>
                                 </span>
                                 <span className={cn(
                                     "font-medium text-sm",
-                                    status?.tunnel?.active ? "text-green-500" : "text-muted-foreground"
+                                    status?.team?.configured ? "text-green-500" : "text-muted-foreground"
                                 )}>
-                                    {status?.tunnel?.active
-                                        ? <span className="flex items-center gap-1" title={status.tunnel.public_url || undefined}>
+                                    {status?.team?.connected
+                                        ? <span className="flex items-center gap-1">
                                             <Check className="w-3 h-3" />
-                                            Active
+                                            Connected
                                           </span>
-                                        : <Link to="/team/sharing" className="hover:underline">Off</Link>
+                                        : status?.team?.configured
+                                            ? <span className="flex items-center gap-1">
+                                                <Check className="w-3 h-3" />
+                                                Configured
+                                              </span>
+                                            : <Link to="/team" className="hover:underline">Off</Link>
                                     }
                                 </span>
                             </div>

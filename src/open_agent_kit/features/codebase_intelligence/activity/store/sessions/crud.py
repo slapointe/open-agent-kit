@@ -185,6 +185,7 @@ def end_session(store: ActivityStore, session_id: str, summary: str | None = Non
         session_id: Session to end.
         summary: Optional session summary.
     """
+    ended_at = datetime.now().isoformat()
     with store._transaction() as conn:
         conn.execute(
             f"""
@@ -192,8 +193,9 @@ def end_session(store: ActivityStore, session_id: str, summary: str | None = Non
             SET ended_at = ?, status = '{SESSION_STATUS_COMPLETED}', summary = ?
             WHERE id = ?
             """,
-            (datetime.now().isoformat(), summary, session_id),
+            (ended_at, summary, session_id),
         )
+
     logger.debug(f"Ended session {session_id}")
 
 
@@ -214,6 +216,7 @@ def update_session_title(
             "UPDATE sessions SET title = ?, title_manually_edited = ? WHERE id = ?",
             (title, manually_edited, session_id),
         )
+
     logger.debug(f"Updated session {session_id} title: {title[:50]}...")
 
 
@@ -231,6 +234,7 @@ def update_session_summary(store: ActivityStore, session_id: str, summary: str) 
             "UPDATE sessions SET summary = ?, summary_updated_at = ? WHERE id = ?",
             (summary, now_epoch, session_id),
         )
+
     logger.debug(f"Updated session {session_id} summary: {summary[:50]}...")
 
 
@@ -266,6 +270,7 @@ def update_session_transcript_path(
             f"UPDATE sessions SET {CI_SESSION_COLUMN_TRANSCRIPT_PATH} = ? WHERE id = ?",
             (transcript_path, session_id),
         )
+
     logger.debug(f"Updated session {session_id} transcript_path: {transcript_path}")
 
 

@@ -8,11 +8,15 @@ Thank you for your interest in contributing to open-agent-kit! This guide covers
 # Clone and setup
 git clone https://github.com/YOUR_USERNAME/open-agent-kit.git
 cd open-agent-kit
-make setup      # Installs dependencies with uv
+make setup           # Installs dependencies and creates oak-dev symlink
+oak-dev init         # Initializes .oak/, installs hooks, starts CI daemon
 
 # Verify everything works
-make check      # Runs all CI checks
+make check           # Runs all CI checks
 ```
+
+> **Note**: `make setup` only installs the package — it does not initialize the project.
+> `oak-dev init` is required before `oak-dev ci start` will work.
 
 ## Prerequisites
 
@@ -38,6 +42,10 @@ Run `make help` to see all available commands:
 | `make format` | Auto-format code |
 | `make lint` | Run linter |
 | `make typecheck` | Run type checking |
+| `make skill-build` | Regenerate skill reference files (required after schema changes) |
+| `make skill-check` | Verify skill files are in sync — run by CI separately from `make check` |
+| `make ui-build` | Rebuild UI static assets (required after changes to `daemon/ui/src/`) |
+| `make ui-check` | Verify UI assets are in sync — run by CI separately from `make check` |
 
 ### Making Changes
 
@@ -52,6 +60,19 @@ Run `make help` to see all available commands:
    ```bash
    make check
    ```
+
+   > **Schema changes**: If you modified the CI database schema, also run `make skill-build`
+   > to regenerate `skills/codebase-intelligence/references/schema.md` — CI runs
+   > `make skill-check` separately and will fail if the file is stale.
+   >
+   > **UI changes**: If you modified files under `daemon/ui/src/`, also run `make ui-build`
+   > to rebuild the static assets — CI runs `make ui-check` separately.
+   >
+   > ⚠️ **Gotcha**: When adding a new database migration, you must also bump
+   > `CI_ACTIVITY_SCHEMA_VERSION` in
+   > [`src/open_agent_kit/features/codebase_intelligence/constants/paths.py`](src/open_agent_kit/features/codebase_intelligence/constants/paths.py).
+   > If you forget, the database is left at an intermediate version and subsequent
+   > migrations may silently fail on fresh clones.
 
 4. **Commit with conventional messages**
    - `Add:` new features

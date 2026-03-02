@@ -11,8 +11,10 @@ import SessionDetail from "@/pages/SessionDetail";
 import Config from "@/pages/Config";
 import DevTools from "@/pages/DevTools";
 import Team from "@/pages/Team";
+import TeamRelay from "@/components/team/TeamRelay";
+import TeamMembers from "@/components/team/TeamMembers";
+import TeamPolicy from "@/components/team/TeamPolicy";
 import TeamBackups from "@/components/team/TeamBackups";
-import TeamSharing from "@/components/team/TeamSharing";
 import Help from "@/pages/Help";
 import AgentsLayout from "@/pages/AgentsLayout";
 import AgentsList from "@/components/agents/AgentsList";
@@ -20,10 +22,10 @@ import RunHistory from "@/components/agents/RunHistory";
 import Schedules from "@/components/agents/Schedules";
 import AgentSettings from "@/pages/AgentSettings";
 import ACPIntegrations from "@/components/agents/ACPIntegrations";
-import CloudRelay from "@/pages/CloudRelay";
 import Governance from "@/pages/Governance";
 import GovernanceAudit from "@/components/governance/GovernanceAudit";
 import GovernanceRules from "@/components/governance/GovernanceRules";
+
 
 export const router = createBrowserRouter([
     {
@@ -31,7 +33,6 @@ export const router = createBrowserRouter([
         element: <Layout />,
         children: [
             { index: true, element: <Dashboard /> },
-            // Placeholders for other routes
             { path: "search", element: <Search /> },
             {
                 path: "activity",
@@ -56,7 +57,8 @@ export const router = createBrowserRouter([
                     { path: "integrations", element: <ACPIntegrations /> },
                 ]
             },
-            { path: "cloud", element: <CloudRelay /> },
+            // Legacy redirects
+            { path: "cloud", element: <Navigate to="/team/relay" replace /> },
             {
                 path: "governance",
                 element: <Governance />,
@@ -70,9 +72,16 @@ export const router = createBrowserRouter([
                 path: "team",
                 element: <Team />,
                 children: [
-                    { index: true, element: <Navigate to="backups" replace /> },
+                    { index: true, element: <Navigate to="relay" replace /> },
+                    { path: "relay", element: <TeamRelay /> },
+                    { path: "members", element: <TeamMembers /> },
+                    { path: "policy", element: <TeamPolicy /> },
                     { path: "backups", element: <TeamBackups /> },
-                    { path: "sharing", element: <TeamSharing /> },
+                    // Legacy redirects
+                    { path: "status", element: <Navigate to="/team/relay" replace /> },
+                    { path: "config", element: <Navigate to="/team/relay" replace /> },
+                    { path: "connectivity", element: <Navigate to="/team/relay" replace /> },
+                    { path: "sharing", element: <Navigate to="/team/relay" replace /> },
                 ]
             },
             { path: "config", element: <Config /> },

@@ -71,24 +71,28 @@ def create_app(
 
     # --- Middleware stack ---
     # Add order determines nesting: first added = innermost.
-    # Request flow: CORS -> RequestSizeLimit -> TokenAuth -> app
+    # Request flow: CORS -> RequestSizeLimit -> TokenAuth -> ActivityTracking -> app
     # (CORS outermost handles preflight before any auth checks)
     from open_agent_kit.features.codebase_intelligence.daemon.manager import (
         get_project_port,
     )
     from open_agent_kit.features.codebase_intelligence.daemon.middleware import (
+        ActivityTrackingMiddleware,
         DynamicCORSMiddleware,
         RequestSizeLimitMiddleware,
         TokenAuthMiddleware,
     )
 
-    # 1. TokenAuth (innermost -- added first)
+    # 1. ActivityTracking (innermost -- added first, runs after auth)
+    app.add_middleware(ActivityTrackingMiddleware)
+
+    # 2. TokenAuth
     app.add_middleware(TokenAuthMiddleware)
 
-    # 2. RequestSizeLimit (middle)
+    # 3. RequestSizeLimit
     app.add_middleware(RequestSizeLimitMiddleware)
 
-    # 3. CORS (outermost -- added last, runs first on requests)
+    # 4. CORS (outermost -- added last, runs first on requests)
     ci_data_dir = state.project_root / OAK_DIR / CI_DATA_DIR
     port = get_project_port(state.project_root, ci_data_dir)
     allowed_origins = [
@@ -141,7 +145,7 @@ def create_app(
         restart,
         schedules,
         search,
-        tunnel,
+        search_network,
         ui,
     )
     from open_agent_kit.features.codebase_intelligence.daemon.routes import (
@@ -157,6 +161,7 @@ def create_app(
     app.include_router(config_exclusions.router)
     app.include_router(index.router)
     app.include_router(search.router)
+    app.include_router(search_network.router)
     app.include_router(activity.router)
     app.include_router(activity_plans.router)
     app.include_router(activity_processing.router)
@@ -176,12 +181,25 @@ def create_app(
     app.include_router(devtools.router)
     app.include_router(devtools_processing.router)
     app.include_router(backup.router)
-    app.include_router(tunnel.router)
     app.include_router(cloud_relay.router)
     app.include_router(restart.router)
     app.include_router(governance.router)
     app.include_router(acp.router)
     app.include_router(acp_sessions.router)
+
+    # Release channel routes
+    from open_agent_kit.features.codebase_intelligence.daemon.routes import (
+        release_channel,
+    )
+
+    app.include_router(release_channel.router)
+
+    # Team UI routes (always available -- both client and server mode)
+    from open_agent_kit.features.codebase_intelligence.daemon.routes.team import (
+        router as team_ui_router,
+    )
+
+    app.include_router(team_ui_router)
 
     # UI router must be last to catch fallback routes
     app.include_router(ui.router)

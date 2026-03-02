@@ -92,6 +92,7 @@ _PATCH_RUN_NPM_INSTALL = f"{_DEPLOY_MODULE}.run_npm_install"
 _PATCH_CHECK_WRANGLER_AUTH = f"{_DEPLOY_MODULE}.check_wrangler_auth"
 _PATCH_RUN_WRANGLER_DEPLOY = f"{_DEPLOY_MODULE}.run_wrangler_deploy"
 _PATCH_CHECK_WRANGLER_AVAILABLE = f"{_DEPLOY_MODULE}.check_wrangler_available"
+_PATCH_SYNC_SOURCE_FILES = f"{_SCAFFOLD_MODULE}.sync_source_files"
 _PATCH_LOAD_CI_CONFIG = f"{_CONFIG_MODULE}.load_ci_config"
 _PATCH_SAVE_CI_CONFIG = f"{_CONFIG_MODULE}.save_ci_config"
 
@@ -116,12 +117,15 @@ def client(auth_headers):
 def _setup_state_with_config(
     worker_url: str | None = None,
     token: str | None = None,
-) -> None:
+) -> MagicMock:
     """Set up daemon state with CI config.
 
     Args:
         worker_url: Optional worker URL in config.
         token: Optional relay token in config.
+
+    Returns:
+        The daemon state object.
     """
     state = get_state()
     state.ci_config = CIConfig()
@@ -129,18 +133,30 @@ def _setup_state_with_config(
         worker_url=worker_url,
         token=token,
     )
+    return state
 
 
 class TestCloudRelayStatus:
     """Tests for GET /api/cloud/status."""
 
     def test_status_no_client(self, client: TestClient) -> None:
-        """Returns disconnected when no cloud relay client is active."""
+        """Returns disconnected with null worker_url when no client and no config worker_url."""
+        _setup_state_with_config(worker_url=None)
         response = client.get(CI_CLOUD_RELAY_API_PATH_STATUS)
         assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data[CLOUD_RELAY_RESPONSE_KEY_CONNECTED] is False
         assert data[CLOUD_RELAY_RESPONSE_KEY_WORKER_URL] is None
+        assert data[CLOUD_RELAY_RESPONSE_KEY_ERROR] is None
+
+    def test_status_no_client_with_deployed_worker(self, client: TestClient) -> None:
+        """Returns deployed worker_url from config even when not connected."""
+        _setup_state_with_config(worker_url=TEST_WORKER_URL)
+        response = client.get(CI_CLOUD_RELAY_API_PATH_STATUS)
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
+        assert data[CLOUD_RELAY_RESPONSE_KEY_CONNECTED] is False
+        assert data[CLOUD_RELAY_RESPONSE_KEY_WORKER_URL] == TEST_WORKER_URL
         assert data[CLOUD_RELAY_RESPONSE_KEY_ERROR] is None
 
     def test_status_connected_client(self, client: TestClient) -> None:
@@ -297,7 +313,7 @@ class TestCloudRelayConnect:
 
     def test_connect_uses_config_url_and_token(self, client: TestClient) -> None:
         """Falls back to config values when body is empty."""
-        _setup_state_with_config(worker_url=TEST_WORKER_URL, token=TEST_RELAY_TOKEN)
+        state = _setup_state_with_config(worker_url=TEST_WORKER_URL, token=TEST_RELAY_TOKEN)
 
         mock_instance = AsyncMock()
         mock_instance.connect = AsyncMock(
@@ -311,12 +327,12 @@ class TestCloudRelayConnect:
             response = client.post(CI_CLOUD_RELAY_API_PATH_CONNECT, json={})
         assert response.status_code == HTTPStatus.OK
         mock_instance.connect.assert_called_once_with(
-            TEST_WORKER_URL, TEST_RELAY_TOKEN, TEST_DAEMON_PORT
+            TEST_WORKER_URL, TEST_RELAY_TOKEN, TEST_DAEMON_PORT, machine_id=state.machine_id or ""
         )
 
     def test_connect_body_overrides_config(self, client: TestClient) -> None:
         """Request body values override config values."""
-        _setup_state_with_config(worker_url=TEST_WORKER_URL, token="config-token")
+        state = _setup_state_with_config(worker_url=TEST_WORKER_URL, token="config-token")
 
         mock_instance = AsyncMock()
         mock_instance.connect = AsyncMock(
@@ -336,7 +352,10 @@ class TestCloudRelayConnect:
             )
         assert response.status_code == HTTPStatus.OK
         mock_instance.connect.assert_called_once_with(
-            TEST_WORKER_URL_ALTERNATE, TEST_RELAY_TOKEN, TEST_DAEMON_PORT
+            TEST_WORKER_URL_ALTERNATE,
+            TEST_RELAY_TOKEN,
+            TEST_DAEMON_PORT,
+            machine_id=state.machine_id or "",
         )
 
 
@@ -385,16 +404,18 @@ class TestCloudRelayStart:
             return_value=RelayStatus(connected=True, worker_url=TEST_WORKER_URL)
         )
 
-        # load_ci_config is called 4 times in the full flow:
+        # load_ci_config is called 5 times in the full flow:
         # 1. inside scaffold phase (persist tokens)
         # 2. re-read after scaffold
         # 3. after deploy (save worker_url)
         # 4. final read for connect phase
+        # 5. persist auto_connect=True after successful connect
         configs = [
             _make_config_with(),  # 1: scaffold persist
             _make_config_with(),  # 2: re-read after scaffold
             _make_config_with(),  # 3: deploy save
             _make_config_with(worker_url=TEST_WORKER_URL),  # 4: final read
+            _make_config_with(worker_url=TEST_WORKER_URL),  # 5: auto_connect persist
         ]
 
         with (
@@ -459,6 +480,7 @@ class TestCloudRelayStart:
                     authenticated=True,
                 ),
             ),
+            patch(_PATCH_SYNC_SOURCE_FILES, return_value=0),
             patch(_PATCH_RUN_NPM_INSTALL) as mock_npm,
             patch(
                 _PATCH_RUN_WRANGLER_DEPLOY,
@@ -467,6 +489,7 @@ class TestCloudRelayStart:
             patch(_PATCH_GET_PORT, return_value=TEST_DAEMON_PORT),
             patch(_PATCH_CLIENT_CLS, return_value=mock_relay_instance),
             patch("pathlib.Path.is_dir", return_value=True),
+            patch("pathlib.Path.is_file", return_value=True),
         ):
             response = client.post(CI_CLOUD_RELAY_API_PATH_START, json={})
 
@@ -494,6 +517,7 @@ class TestCloudRelayStart:
                 return_value=WranglerAuthInfo(authenticated=False),
             ),
             patch("pathlib.Path.is_dir", return_value=True),
+            patch("pathlib.Path.is_file", return_value=True),
         ):
             response = client.post(CI_CLOUD_RELAY_API_PATH_START, json={})
 
@@ -512,6 +536,7 @@ class TestCloudRelayStart:
         with (
             patch(_PATCH_IS_SCAFFOLDED, return_value=True),
             patch(_PATCH_RENDER_WRANGLER),
+            patch(_PATCH_SYNC_SOURCE_FILES, return_value=0),
             patch(_PATCH_LOAD_CI_CONFIG, return_value=config),
             patch(
                 _PATCH_CHECK_WRANGLER_AUTH,
@@ -526,6 +551,7 @@ class TestCloudRelayStart:
                 return_value=(False, None, "Error: deploy failed"),
             ),
             patch("pathlib.Path.is_dir", return_value=True),
+            patch("pathlib.Path.is_file", return_value=True),
         ):
             response = client.post(CI_CLOUD_RELAY_API_PATH_START, json={})
 
@@ -922,6 +948,7 @@ class TestCloudRelayWorkerNameInResponse:
         with (
             patch(_PATCH_IS_SCAFFOLDED, return_value=True),
             patch(_PATCH_RENDER_WRANGLER),
+            patch(_PATCH_SYNC_SOURCE_FILES, return_value=0),
             patch(_PATCH_LOAD_CI_CONFIG, return_value=config_with_url),
             patch(_PATCH_SAVE_CI_CONFIG),
             patch(
@@ -939,6 +966,7 @@ class TestCloudRelayWorkerNameInResponse:
             patch(_PATCH_GET_PORT, return_value=TEST_DAEMON_PORT),
             patch(_PATCH_CLIENT_CLS, return_value=mock_relay_instance),
             patch("pathlib.Path.is_dir", return_value=True),
+            patch("pathlib.Path.is_file", return_value=True),
         ):
             response = client.post(CI_CLOUD_RELAY_API_PATH_START, json={})
 

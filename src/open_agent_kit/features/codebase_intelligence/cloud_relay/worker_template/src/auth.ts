@@ -48,7 +48,8 @@ export function validateAgentToken(
 
 /**
  * Validate a local daemon WebSocket upgrade request.
- * The relay token is sent in the Sec-WebSocket-Protocol header.
+ * The relay token is sent in the Sec-WebSocket-Protocol header
+ * (browsers don't allow custom headers on WS upgrades).
  * Returns null on success, or a 401 Response on failure.
  */
 export function validateRelayToken(
@@ -76,19 +77,49 @@ export function validateRelayToken(
 }
 
 /**
+ * Validate a plain HTTP request from a local daemon using Authorization: Bearer.
+ * Used for HTTP-only relay endpoints (/obs/pending, /obs/stats) where the
+ * Sec-WebSocket-Protocol header is not available.
+ * Returns null on success, or a 401 Response on failure.
+ */
+export function validateRelayTokenHttp(
+  request: Request,
+  env: Env,
+): Response | null {
+  const header = request.headers.get("Authorization");
+  if (!header) {
+    return new Response(JSON.stringify({ error: "missing relay token" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const token = header.startsWith(BEARER_PREFIX)
+    ? header.slice(BEARER_PREFIX.length)
+    : header;
+
+  if (!timingSafeEqual(token, env.RELAY_TOKEN)) {
+    return new Response(JSON.stringify({ error: "invalid relay token" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  return null;
+}
+
+/**
  * Constant-time string comparison to prevent timing attacks.
- * Falls back to byte-by-byte XOR when crypto.subtle is unavailable.
+ * Pads to max length and XORs all bytes to avoid leaking length via early return.
  */
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
   const encoder = new TextEncoder();
   const bufA = encoder.encode(a);
   const bufB = encoder.encode(b);
-  let mismatch = 0;
-  for (let i = 0; i < bufA.length; i++) {
-    mismatch |= bufA[i] ^ bufB[i];
+  const maxLen = Math.max(bufA.length, bufB.length);
+  let mismatch = bufA.length ^ bufB.length;
+  for (let i = 0; i < maxLen; i++) {
+    mismatch |= (bufA[i] ?? 0) ^ (bufB[i] ?? 0);
   }
   return mismatch === 0;
 }

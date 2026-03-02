@@ -3,6 +3,11 @@
 from typing import Final
 
 # =============================================================================
+# General CLI exit codes
+# =============================================================================
+CI_EXIT_CODE_FAILURE: Final[int] = 1
+
+# =============================================================================
 # CORS (Daemon API)
 # =============================================================================
 
@@ -100,6 +105,13 @@ CI_AUTH_ENV_VAR: Final[str] = "OAK_CI_TOKEN"
 # Bearer authentication scheme and header
 CI_AUTH_SCHEME_BEARER: Final[str] = "Bearer"
 CI_AUTH_HEADER_NAME: Final[str] = "authorization"
+
+# Relay source header: identifies traffic origin for auth routing.
+# When present with value "relay", middleware reads daemon auth from
+# CI_RELAY_DAEMON_AUTH_HEADER instead of the standard Authorization header.
+CI_RELAY_SOURCE_HEADER: Final[str] = "x-oak-source"
+CI_RELAY_SOURCE_VALUE: Final[str] = "relay"
+CI_RELAY_DAEMON_AUTH_HEADER: Final[str] = "x-oak-daemon-auth"
 
 # Maximum request body size (10 MB) to prevent memory exhaustion
 CI_MAX_REQUEST_BODY_BYTES: Final[int] = 10 * 1024 * 1024

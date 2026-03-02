@@ -2,7 +2,7 @@
 
 Complete DDL for the Oak CI SQLite database at `.oak/ci/activities.db`.
 
-Current schema version: **8**
+Current schema version: **10**
 
 ## memory_observations
 
@@ -168,6 +168,9 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     project_config TEXT,  -- JSON of project config at run time
     system_prompt_hash TEXT,  -- Hash of system prompt used
 
+    -- Execution config (for watchdog recovery)
+    timeout_seconds INTEGER,  -- Configured timeout for this run
+
     -- Machine tracking
     source_machine_id TEXT
 );
@@ -302,6 +305,60 @@ CREATE TABLE IF NOT EXISTS governance_audit_events (
 ```
 
 **Key indexes:** `idx_gov_audit_session`, `idx_gov_audit_action`, `idx_gov_audit_created`, `idx_gov_audit_tool`, `idx_gov_audit_rule`
+
+## team_outbox
+
+```sql
+CREATE TABLE IF NOT EXISTS team_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    source_machine_id TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    schema_version INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    retry_count INTEGER DEFAULT 0,
+    error_message TEXT
+);
+```
+
+**Key indexes:** `idx_team_outbox_status`, `idx_team_outbox_created`, `idx_team_outbox_flush`
+
+## team_pull_cursor
+
+```sql
+CREATE TABLE IF NOT EXISTS team_pull_cursor (
+    server_url TEXT PRIMARY KEY,
+    cursor_value TEXT,
+    updated_at TEXT NOT NULL
+);
+```
+
+## team_sync_state
+
+Key-value store for team relay sync metadata.
+
+```sql
+CREATE TABLE IF NOT EXISTS team_sync_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
+
+## team_reconcile_state
+
+Per-machine reconciliation tracking for team sync.
+
+```sql
+CREATE TABLE IF NOT EXISTS team_reconcile_state (
+    machine_id TEXT PRIMARY KEY,
+    last_reconcile_at TEXT,
+    last_hash_count INTEGER,
+    last_missing_count INTEGER
+);
+```
 
 ## Full-Text Search Tables (FTS5)
 

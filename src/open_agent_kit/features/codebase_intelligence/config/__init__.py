@@ -27,6 +27,7 @@ from open_agent_kit.features.codebase_intelligence.config.embedding import (
 
 # --- Governance ---
 from open_agent_kit.features.codebase_intelligence.config.governance import (
+    DataCollectionPolicy,
     GovernanceConfig,
     GovernanceRule,
 )
@@ -36,7 +37,6 @@ from open_agent_kit.features.codebase_intelligence.config.infrastructure import 
     BackupConfig,
     CloudRelayConfig,
     LogRotationConfig,
-    TunnelConfig,
 )
 
 # --- I/O and classification ---
@@ -44,6 +44,7 @@ from open_agent_kit.features.codebase_intelligence.config.io import (
     DEFAULT_EXCLUDE_PATTERNS,
     USER_CLASSIFIED_PATHS,
     _deep_merge,
+    _scrub_dead_keys,
     _split_by_classification,
     _user_config_path,
     _write_yaml_config,
@@ -69,6 +70,9 @@ from open_agent_kit.features.codebase_intelligence.config.summarization import (
     SummarizationConfig,
 )
 
+# --- Team ---
+from open_agent_kit.features.codebase_intelligence.config.team import TeamConfig
+
 __all__ = [
     # Dataclass configs
     "AgentConfig",
@@ -76,13 +80,14 @@ __all__ = [
     "BackupConfig",
     "CIConfig",
     "CloudRelayConfig",
+    "DataCollectionPolicy",
     "EmbeddingConfig",
     "GovernanceConfig",
     "GovernanceRule",
     "LogRotationConfig",
     "SessionQualityConfig",
     "SummarizationConfig",
-    "TunnelConfig",
+    "TeamConfig",
     # Type aliases
     "ProviderType",
     # Constants
@@ -101,6 +106,7 @@ __all__ = [
     "save_ci_config",
     # Internal helpers (used by tests)
     "_deep_merge",
+    "_scrub_dead_keys",
     "_split_by_classification",
     "_user_config_path",
     "_write_yaml_config",

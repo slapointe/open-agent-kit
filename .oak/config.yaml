@@ -1,4 +1,4 @@
-version: 1.3.1.dev1+g8585b791f
+version: 1.3.2.dev1+g7f79b0cd1.d20260226
 agents:
 - vscode-copilot
 - opencode
@@ -26,9 +26,6 @@ codebase_intelligence:
     enabled: true
     executor_cache_size: 100
     max_turns: 50
-    provider_base_url: null
-    provider_model: null
-    provider_type: cloud
     scheduler_interval_seconds: 60
     timeout_seconds: 600
     background_processing_workers: 4
@@ -40,7 +37,6 @@ codebase_intelligence:
     base_url: http://localhost:11434
     context_tokens: 8192
     dimensions: 1024
-    fallback_enabled: false
     max_chunk_chars: 6553
     model: bge-m3
     provider: ollama
@@ -115,7 +111,6 @@ codebase_intelligence:
   - '*.po'
   - '*.pot'
   - '*.mo'
-  index_on_startup: true
   log_level: DEBUG
   log_rotation:
     backup_count: 3
@@ -132,12 +127,6 @@ codebase_intelligence:
     model: openai/gpt-oss-20b
     provider: lmstudio
     timeout: 180.0
-  tunnel:
-    auto_start: false
-    cloudflared_path: null
-    ngrok_path: null
-    provider: cloudflared
-  watch_files: true
   auto_resolve:
     enabled: true
     similarity_threshold: 0.85
@@ -152,3 +141,10 @@ codebase_intelligence:
         description: Warn when agent reads or writes to env file, enabled: true, tool: '*',
         pattern: '', path_pattern: '*.env', action: warn, message: ''}]
     retention_days: 30
+    data_collection:
+      sync_observations: true
+  team:
+    sync_interval_seconds: 3
+    project_slug: null
+    relay_worker_url: https://oak-relay-open-agent-kit.goondocks.workers.dev
+    relay_worker_name: null

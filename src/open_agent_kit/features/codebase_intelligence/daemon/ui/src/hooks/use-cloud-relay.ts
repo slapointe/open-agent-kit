@@ -24,6 +24,7 @@ export interface CloudRelayStatus {
     cf_account_name: string | null;
     custom_domain: string | null;
     worker_name: string | null;
+    update_available: boolean;
 }
 
 /** Cloud relay start response */
@@ -90,6 +91,20 @@ export function useCloudRelayStart() {
     return useMutation<CloudRelayStartResponse, Error, void>({
         mutationFn: () =>
             postJson(API_ENDPOINTS.CLOUD_RELAY_START, {}),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["cloud-relay-status"] });
+        },
+    });
+}
+
+/**
+ * Hook to connect to an already-deployed relay (WS only, no redeploy).
+ */
+export function useCloudRelayConnect() {
+    const queryClient = useQueryClient();
+    return useMutation<CloudRelayStartResponse, Error, void>({
+        mutationFn: () =>
+            postJson(API_ENDPOINTS.CLOUD_RELAY_CONNECT, {}),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["cloud-relay-status"] });
         },

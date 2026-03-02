@@ -80,6 +80,7 @@ from open_agent_kit.features.codebase_intelligence.constants import (
     CLOUD_RELAY_RESPONSE_KEY_RECONNECT_ATTEMPTS,
     CLOUD_RELAY_RESPONSE_KEY_STATUS,
     CLOUD_RELAY_RESPONSE_KEY_SUGGESTION,
+    CLOUD_RELAY_RESPONSE_KEY_UPDATE_AVAILABLE,
     CLOUD_RELAY_RESPONSE_KEY_WORKER_NAME,
     CLOUD_RELAY_RESPONSE_KEY_WORKER_URL,
     CLOUD_RELAY_SCAFFOLD_NODE_MODULES_DIR,
@@ -203,6 +204,10 @@ async def start_cloud_relay(body: dict | None = None) -> dict:
             error=CI_CLOUD_RELAY_ERROR_CONFIG_NOT_LOADED,
         )
 
+    # No ownership guard — any team member with valid Cloudflare credentials can
+    # deploy or update the relay Worker.  If wrangler is not authenticated or points
+    # to a different account the auth_check phase will fail with a clear message.
+
     from open_agent_kit.features.codebase_intelligence.cloud_relay.deploy import (
         check_wrangler_auth,
         run_npm_install,
@@ -214,6 +219,7 @@ async def start_cloud_relay(body: dict | None = None) -> dict:
         make_worker_name,
         render_worker_template,
         render_wrangler_config,
+        sync_source_files,
     )
     from open_agent_kit.features.codebase_intelligence.config import (
         load_ci_config,
@@ -225,7 +231,24 @@ async def start_cloud_relay(body: dict | None = None) -> dict:
     relay_config = state.ci_config.cloud_relay
 
     # ------------------------------------------------------------------
-    # Phase 1: Scaffold
+    # Phase 1: Auth check (fast, no side effects — fail before doing work)
+    # ------------------------------------------------------------------
+    logger.info(CI_CLOUD_RELAY_LOG_PHASE_AUTH_CHECK)
+    loop = asyncio.get_running_loop()
+    auth_info = await loop.run_in_executor(None, check_wrangler_auth, project_root)
+
+    if auth_info is None or not auth_info.authenticated:
+        return _make_error_response(
+            phase=CLOUD_RELAY_PHASE_AUTH_CHECK,
+            error=CLOUD_RELAY_ERROR_NOT_AUTHENTICATED,
+            suggestion=CLOUD_RELAY_SUGGESTION_WRANGLER_LOGIN,
+        )
+
+    # Store account name for status display
+    state.cf_account_name = auth_info.account_name
+
+    # ------------------------------------------------------------------
+    # Phase 2: Scaffold
     # ------------------------------------------------------------------
     if not is_scaffolded(project_root):
         logger.info(CI_CLOUD_RELAY_LOG_PHASE_SCAFFOLD)
@@ -278,13 +301,21 @@ async def start_cloud_relay(body: dict | None = None) -> dict:
         custom_domain=relay_config.custom_domain,
     )
 
+    # Always sync TypeScript source files from the bundled template so
+    # that every deploy picks up the latest code (e.g. after a package
+    # upgrade).  This is cheap (a handful of small files) and avoids the
+    # stale-scaffold problem where the deployed Worker lacks new features.
+    sync_source_files(scaffold_dir)
+
     # ------------------------------------------------------------------
-    # Phase 2: npm install (skip if node_modules exists)
+    # Phase 3: npm install (skip if node_modules exists)
     # ------------------------------------------------------------------
+    # Verify wrangler-dist/cli.js exists — a partial npm install leaves node_modules/
+    # in place but missing sub-packages, which causes wrangler to crash at runtime.
     node_modules = scaffold_dir / CLOUD_RELAY_SCAFFOLD_NODE_MODULES_DIR
-    if not node_modules.is_dir():
+    wrangler_cli = node_modules / "wrangler-dist" / "cli.js"
+    if not node_modules.is_dir() or not wrangler_cli.is_file():
         logger.info(CI_CLOUD_RELAY_LOG_PHASE_NPM_INSTALL)
-        loop = asyncio.get_running_loop()
         success, npm_output = await loop.run_in_executor(None, run_npm_install, scaffold_dir)
         if not success:
             return _make_error_response(
@@ -299,23 +330,6 @@ async def start_cloud_relay(body: dict | None = None) -> dict:
             )
     else:
         logger.info(CI_CLOUD_RELAY_LOG_PHASE_NPM_INSTALL_SKIP)
-
-    # ------------------------------------------------------------------
-    # Phase 3: Auth check
-    # ------------------------------------------------------------------
-    logger.info(CI_CLOUD_RELAY_LOG_PHASE_AUTH_CHECK)
-    loop = asyncio.get_running_loop()
-    auth_info = await loop.run_in_executor(None, check_wrangler_auth, scaffold_dir)
-
-    if auth_info is None or not auth_info.authenticated:
-        return _make_error_response(
-            phase=CLOUD_RELAY_PHASE_AUTH_CHECK,
-            error=CLOUD_RELAY_ERROR_NOT_AUTHENTICATED,
-            suggestion=CLOUD_RELAY_SUGGESTION_WRANGLER_LOGIN,
-        )
-
-    # Store account name for status display
-    state.cf_account_name = auth_info.account_name
 
     # ------------------------------------------------------------------
     # Phase 4: Deploy (always — idempotent, ensures config changes
@@ -341,9 +355,14 @@ async def start_cloud_relay(body: dict | None = None) -> dict:
 
     worker_url = deployed_url
 
-    # Save worker_url to config
+    # Save worker_url and deployed template hash to config
+    from open_agent_kit.features.codebase_intelligence.cloud_relay.scaffold import (
+        compute_template_hash,
+    )
+
     ci_config_fresh = load_ci_config(project_root)
     ci_config_fresh.cloud_relay.worker_url = worker_url
+    ci_config_fresh.cloud_relay.deployed_template_hash = compute_template_hash()
     save_ci_config(project_root, ci_config_fresh)
     state.ci_config = None
 
@@ -396,8 +415,18 @@ async def start_cloud_relay(body: dict | None = None) -> dict:
     )
 
     try:
-        relay_status = await client.connect(worker_url, token, port)
+        relay_status = await client.connect(
+            worker_url, token, port, machine_id=state.machine_id or ""
+        )
         state.cloud_relay_client = client
+
+        # Wire obs applier so incoming peer observations are applied locally
+        if state.activity_store is not None:
+            from open_agent_kit.features.codebase_intelligence.team.sync.obs_applier import (
+                RemoteObsApplier,
+            )
+
+            client.set_obs_applier(RemoteObsApplier(state.activity_store))
     except Exception as exc:
         error_msg = CI_CLOUD_RELAY_ERROR_CONNECT_FAILED.format(error=str(exc))
         logger.error(error_msg)
@@ -411,6 +440,16 @@ async def start_cloud_relay(body: dict | None = None) -> dict:
             phase=CLOUD_RELAY_PHASE_CONNECT,
             error=relay_status.error or CLOUD_RELAY_ERROR_CONNECTION_FAILED,
         )
+
+    # Persist auto_connect so the relay reconnects after daemon restart.
+    # Also auto-populate team relay config — the team relay IS this Worker,
+    # so relay_worker_url and api_key are the same values.
+    ci_config_ac = load_ci_config(project_root)
+    ci_config_ac.cloud_relay.auto_connect = True
+    ci_config_ac.team.relay_worker_url = worker_url
+    ci_config_ac.team.api_key = token
+    save_ci_config(project_root, ci_config_ac)
+    state.ci_config = None
 
     mcp_endpoint = _mcp_endpoint(
         worker_url, relay_config_final.custom_domain, effective_worker_name
@@ -455,6 +494,19 @@ async def stop_cloud_relay() -> dict:
     finally:
         state.cloud_relay_client = None
         state.cf_account_name = None
+        state.clear_relay_credentials()
+
+    # Clear auto_connect so relay stays off after restart
+    if state.project_root:
+        from open_agent_kit.features.codebase_intelligence.config import (
+            load_ci_config,
+            save_ci_config,
+        )
+
+        ci_config = load_ci_config(state.project_root)
+        ci_config.cloud_relay.auto_connect = False
+        save_ci_config(state.project_root, ci_config)
+        state.ci_config = None
 
     logger.info(CI_CLOUD_RELAY_LOG_DISCONNECTED)
     return {
@@ -649,9 +701,15 @@ async def connect_cloud_relay(body: dict | None = None) -> dict:
 
     relay_config = state.ci_config.cloud_relay
 
-    # Resolve worker_url and token (request body overrides config)
-    worker_url = body.get(CLOUD_RELAY_REQUEST_KEY_WORKER_URL) or relay_config.worker_url
-    token = body.get(CLOUD_RELAY_REQUEST_KEY_TOKEN) or relay_config.token
+    # Resolve worker_url and token (request body overrides config).
+    # Fall back to team config for consumer nodes that store credentials there.
+    team_config = state.ci_config.team
+    worker_url = (
+        body.get(CLOUD_RELAY_REQUEST_KEY_WORKER_URL)
+        or relay_config.worker_url
+        or team_config.relay_worker_url
+    )
+    token = body.get(CLOUD_RELAY_REQUEST_KEY_TOKEN) or relay_config.token or team_config.api_key
 
     if not worker_url:
         raise HTTPException(
@@ -680,10 +738,20 @@ async def connect_cloud_relay(body: dict | None = None) -> dict:
     )
 
     try:
-        relay_status = await client.connect(worker_url, token, port)
+        machine_id = state.machine_id or ""
+        relay_status = await client.connect(worker_url, token, port, machine_id=machine_id)
         state.cloud_relay_client = client
 
+        # Wire obs applier so incoming peer observations are applied locally
+        if state.activity_store is not None:
+            from open_agent_kit.features.codebase_intelligence.team.sync.obs_applier import (
+                RemoteObsApplier,
+            )
+
+            client.set_obs_applier(RemoteObsApplier(state.activity_store))
+
         if relay_status.connected:
+            state.cache_relay_credentials(worker_url, token, port, machine_id)
             return {
                 CLOUD_RELAY_RESPONSE_KEY_STATUS: CLOUD_RELAY_API_STATUS_CONNECTED,
                 **relay_status.to_dict(),
@@ -760,19 +828,42 @@ async def get_cloud_relay_status() -> dict:
 
         worker_name = make_worker_name(state.project_root.name)
 
+    # Compute update_available: True when the scaffold source files differ from
+    # the bundled template.  This directly detects stale deploys regardless of
+    # config state or when the last deploy happened.
+    from open_agent_kit.features.codebase_intelligence.cloud_relay.scaffold import (
+        compute_scaffold_hash,
+        compute_template_hash,
+    )
+
+    scaffold_dir = (
+        state.project_root / CLOUD_RELAY_SCAFFOLD_OUTPUT_DIR if state.project_root else None
+    )
+    scaffold_hash = compute_scaffold_hash(scaffold_dir) if scaffold_dir else None
+    update_available = scaffold_hash is not None and scaffold_hash != compute_template_hash()
+
     if state.cloud_relay_client is None:
+        # Surface config-backed values even when disconnected so the UI can
+        # show the deployed worker URL and let the user reconnect.
+        cfg = state.ci_config.cloud_relay if state.ci_config else None
+        cfg_worker_url = cfg.worker_url if cfg else None
+        cfg_agent_token = cfg.agent_token if cfg else None
+        cfg_mcp_endpoint = (
+            _mcp_endpoint(cfg_worker_url, custom_domain, worker_name) if cfg_worker_url else None
+        )
         return {
             CLOUD_RELAY_RESPONSE_KEY_CONNECTED: False,
-            CLOUD_RELAY_RESPONSE_KEY_WORKER_URL: None,
+            CLOUD_RELAY_RESPONSE_KEY_WORKER_URL: cfg_worker_url,
             CLOUD_RELAY_RESPONSE_KEY_CONNECTED_AT: None,
             CLOUD_RELAY_RESPONSE_KEY_LAST_HEARTBEAT: None,
             CLOUD_RELAY_RESPONSE_KEY_ERROR: None,
             CLOUD_RELAY_RESPONSE_KEY_RECONNECT_ATTEMPTS: 0,
-            CLOUD_RELAY_RESPONSE_KEY_AGENT_TOKEN: None,
-            CLOUD_RELAY_RESPONSE_KEY_MCP_ENDPOINT: None,
+            CLOUD_RELAY_RESPONSE_KEY_AGENT_TOKEN: cfg_agent_token,
+            CLOUD_RELAY_RESPONSE_KEY_MCP_ENDPOINT: cfg_mcp_endpoint,
             CLOUD_RELAY_RESPONSE_KEY_CF_ACCOUNT_NAME: None,
             CLOUD_RELAY_RESPONSE_KEY_CUSTOM_DOMAIN: custom_domain,
             CLOUD_RELAY_RESPONSE_KEY_WORKER_NAME: worker_name,
+            CLOUD_RELAY_RESPONSE_KEY_UPDATE_AVAILABLE: update_available,
         }
 
     status_dict = state.cloud_relay_client.get_status().to_dict()
@@ -791,5 +882,6 @@ async def get_cloud_relay_status() -> dict:
     status_dict[CLOUD_RELAY_RESPONSE_KEY_CF_ACCOUNT_NAME] = state.cf_account_name
     status_dict[CLOUD_RELAY_RESPONSE_KEY_CUSTOM_DOMAIN] = custom_domain
     status_dict[CLOUD_RELAY_RESPONSE_KEY_WORKER_NAME] = worker_name
+    status_dict[CLOUD_RELAY_RESPONSE_KEY_UPDATE_AVAILABLE] = update_available
 
     return status_dict

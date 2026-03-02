@@ -49,6 +49,7 @@ export const API_ENDPOINTS = {
 
     // Search endpoint
     SEARCH: "/api/search",
+    SEARCH_NETWORK: "/api/search/network",
 
     // Index endpoints
     INDEX_REBUILD: "/api/index/rebuild",
@@ -80,11 +81,6 @@ export const API_ENDPOINTS = {
     BACKUP_RESTORE: "/api/backup/restore",
     BACKUP_RESTORE_ALL: "/api/backup/restore-all",
 
-    // Tunnel endpoints
-    TUNNEL_START: "/api/tunnel/start",
-    TUNNEL_STOP: "/api/tunnel/stop",
-    TUNNEL_STATUS: "/api/tunnel/status",
-
     // Governance endpoints
     GOVERNANCE_CONFIG: "/api/governance/config",
     GOVERNANCE_AUDIT: "/api/governance/audit",
@@ -95,6 +91,7 @@ export const API_ENDPOINTS = {
     // Cloud relay endpoints
     CLOUD_RELAY_STATUS: "/api/cloud/status",
     CLOUD_RELAY_START: "/api/cloud/start",
+    CLOUD_RELAY_CONNECT: "/api/cloud/connect",
     CLOUD_RELAY_STOP: "/api/cloud/stop",
     CLOUD_RELAY_PREFLIGHT: "/api/cloud/preflight",
     CLOUD_RELAY_SETTINGS: "/api/cloud/settings",
@@ -104,6 +101,17 @@ export const API_ENDPOINTS = {
     ACP_START: "/api/acp/start",
     ACP_STOP: "/api/acp/stop",
     ACP_LOGS: "/api/acp/logs",
+
+    // Channel endpoints
+    CHANNEL: "/api/channel",
+    CHANNEL_SWITCH: "/api/channel/switch",
+
+    // Team endpoints
+    TEAM_CONFIG: "/api/team/config",
+    TEAM_STATUS: "/api/team/status",
+    TEAM_MEMBERS: "/api/team/members",
+    TEAM_POLICY: "/api/team/policy",
+    TEAM_LEAVE: "/api/team/leave",
 } as const;
 
 // =============================================================================

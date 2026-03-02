@@ -127,6 +127,68 @@ class UpdateAgentConfigStage(BaseStage):
         )
 
 
+class SyncCliCommandStage(BaseStage):
+    """Sync cli_command in CI config to match the invoked binary name.
+
+    Detects sys.argv[0] and persists it to .oak/config.yaml so that
+    hook and skill installers (which run later) substitute the correct
+    binary name. Handles oak-beta and oak-dev editable installs.
+    """
+
+    name = "sync_cli_command"
+    display_name = "Syncing CLI command"
+    order = StageOrder.SYNC_CLI_COMMAND
+    applicable_flows = {
+        FlowType.FRESH_INIT,
+        FlowType.FORCE_REINIT,
+        FlowType.UPDATE,
+        FlowType.UPGRADE,
+    }
+    is_critical = False
+
+    def _should_run(self, context: PipelineContext) -> bool:
+        return True
+
+    def _execute(self, context: PipelineContext) -> StageOutcome:
+        from open_agent_kit.features.codebase_intelligence.cli_command import (
+            detect_invoked_cli_command,
+        )
+        from open_agent_kit.features.codebase_intelligence.config import (
+            load_ci_config,
+            save_ci_config,
+        )
+        from open_agent_kit.features.codebase_intelligence.config.ci_config import CIConfig
+        from open_agent_kit.features.codebase_intelligence.constants import (
+            CI_CLI_COMMAND_DEFAULT,
+        )
+
+        detected = detect_invoked_cli_command()
+
+        try:
+            ci_config = load_ci_config(context.project_root)
+        except (OSError, ValueError, KeyError):
+            ci_config = CIConfig()
+
+        if ci_config.cli_command == detected:
+            return StageOutcome.skipped(f"CLI command already set to '{detected}'")
+
+        # When detection fell back to the default (e.g. running inside a
+        # daemon process where argv[0] is not a real CLI command), preserve
+        # an existing non-default value that looks valid — it was set by a
+        # real invocation (e.g. "oak-dev").  Still fix obviously broken
+        # values like "__main__.py" from a prior bug.
+        if (
+            detected == CI_CLI_COMMAND_DEFAULT
+            and ci_config.cli_command != CI_CLI_COMMAND_DEFAULT
+            and not ci_config.cli_command.endswith(".py")
+        ):
+            return StageOutcome.skipped(f"Keeping configured CLI command '{ci_config.cli_command}'")
+
+        ci_config.cli_command = detected
+        save_ci_config(context.project_root, ci_config)
+        return StageOutcome.success(f"CLI command set to '{detected}'")
+
+
 def get_config_stages() -> list[BaseStage]:
     """Get all configuration stages."""
     return [
@@ -134,4 +196,5 @@ def get_config_stages() -> list[BaseStage]:
         CreateConfigStage(),
         MarkMigrationsCompleteStage(),
         UpdateAgentConfigStage(),
+        SyncCliCommandStage(),
     ]

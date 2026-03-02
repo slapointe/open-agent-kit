@@ -7,6 +7,116 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-03-02]
+
+### Added
+
+- **Federated network search on all agent surfaces** — Oak network search results are now automatically injected into every agent-facing surface; agents no longer need to explicitly call `oak_search` to benefit from network-aware results — [Implement federated network search integration for all agent surfaces](http://localhost:38388/activity/sessions/552059c7-fe38-49dc-8bb0-c44349c87f64)
+- **CI activity migrations and registry integration** — SQL schema migrations for new CI tables landed and the codebase intelligence feature is wired into the production registry, transitioning it from draft to active state — [Implement codebase intelligence migrations and registry integration](http://localhost:38388/activity/sessions/db72af02-1418-42ce-8487-e6efe5dc364a)
+- **Hybrid SQL‑semantic memory consolidation** — the Maintenance Agent's memory-consolidation task replaced an O(n) full semantic scan (which timed out after ~10 min on large codebases) with a hybrid SQL-first pre-filter followed by targeted semantic search; agent turn limit raised to 500 and timeout to 300 s — [Refactor memory consolidation with hybrid SQL‑semantic search](http://localhost:38388/activity/sessions/2e53aba6-43a0-4d3b-ba0f-8395e5439f7b), [Update memory-consolidation task with hybrid SQL‑semantic search](http://localhost:38388/activity/sessions/21efd4ac-7b7f-4ad9-affd-361b53c16d96)
+
+### Fixed
+
+- Fix hanging `make check` — resolved three pre-existing failures caused by a pytest/xdist version mismatch and a truncated string literal in [`hooks_prompt.py`](src/open_agent_kit/features/codebase_intelligence/daemon/routes/hooks_prompt.py) that produced a silent syntax error; added per-test timeouts to prevent future CI hangs — [Fix hanging tests, add timeouts, stabilize CI pipeline](http://localhost:38388/activity/sessions/c9a572ad-41ac-4223-9f5b-f9fc0b33419d)
+- Fix `ImportError` crash on daemon startup — [`skill_service.py`](src/open_agent_kit/services/skill_service.py) referenced the non-existent symbol `resolve_ci_cli_comma`; corrected to `resolve_ci_cli_command`, restoring startup for fresh installs — [Implement codebase intelligence migrations and registry integration](http://localhost:38388/activity/sessions/db72af02-1418-42ce-8487-e6efe5dc364a)
+
+### Changed
+
+- Workflow engine refactored for type safety and test coverage — strengthened TypeScript typing, resolved code smells, and expanded the test suite ahead of PR merge — [Refactor workflow engine, add type safety, and improve tests](http://localhost:38388/activity/sessions/0f933ac1-3231-470f-9b6b-b64ac286e90a)
+
+### Notes
+
+> **Gotcha**: `generate_schema_ref.py` must be run after any schema change and before the test suite — it writes [`schema.md`](src/open_agent_kit/features/codebase_intelligence/skills/codebase-intelligence/references/schema.md); omitting it causes tests to read stale schema data. The script is not invoked automatically by the build pipeline.
+
+> **Gotcha**: Always bump `CI_ACTIVITY_SCHEMA_VERSION` in [`constants/paths.py`](src/open_agent_kit/features/codebase_intelligence/constants/paths.py) when adding a migration. A missed bump leaves the database at an intermediate schema version and causes subsequent migrations to fail.
+
+## [2026-03-01]
+
+### Added
+
+- **`oak ci team resync` CLI command** — self-healing command that replays machine events from a snapshot, letting any team node recover from corrupted or orphaned data caused by FK integrity failures without manual intervention or a full re-onboard — [Implement machine resync command to recover from FK bug](http://localhost:38388/activity/sessions/376b648d-7962-4f60-8887-113443740b7c), [Implement team resync CLI command to recover machine events from snapshot](http://localhost:38388/activity/sessions/c4ac862f-7d51-4fd1-b41d-98a144f03176), [Implement team resync CLI command for machine event recovery](http://localhost:38388/activity/sessions/7fdffc23-1c14-497f-b622-3f9dc8fac0db)
+
+### Fixed
+
+- Fix observation upsert silently dropping rows — SQL `INSERT` in [`team/pull/applier.py`](src/open_agent_kit/features/codebase_intelligence/team/pull/applier.py) omitted the `team_id` column, causing a `FOREIGN KEY constraint failed` error on every new observation write; `team_id` is now drawn from the event payload and included in the statement — [Implement team resync CLI command to recover machine events from snapshot](http://localhost:38388/activity/sessions/c4ac862f-7d51-4fd1-b41d-98a144f03176)
+
+### Notes
+
+> **In Progress**: Cloud relay WebSocket connections are rejecting with a 401 during team sync; root cause under active investigation — [Debug Cloud Relay WebSocket 401 for Team Sync commit](http://localhost:38388/activity/sessions/639a99da-7bbb-46b7-9e86-0ae050977e1d)
+
+> **Gotcha**: The cloud relay auth token is held only in memory on the server side — no persistent storage. Any new node connecting after a daemon restart will receive a 401 with no detail. Re-deploy the relay via Team → Connectivity to reissue the token.
+
+## [2026-02-28]
+
+### Added
+
+- **Beta release channel (`oak-beta` binary)** — `oak-beta` installs side-by-side with the stable CLI so users can opt into pre-release features without disrupting their primary installation; a dedicated `ReleaseChannel` enum centralizes channel values across the codebase — [Implement beta release channel for Oak CLI](http://localhost:38388/activity/sessions/67cf5af4-879c-4a73-8614-bd604e464464), [Add beta channel support with oak-beta binary](http://localhost:38388/activity/sessions/6ff0c0aa-33d4-425a-9d9f-8f1f805f82df)
+- **High-fidelity team sync** — team synchronization elevated from "quick sync" to full backup/restore-level fidelity; new members now receive complete historical CI data via a new `/sync/start` API endpoint, with real-time UI status updates reflecting sync progress — [Configure high-fidelity sync strategy flag and module](http://localhost:38388/activity/sessions/875c144e-47fc-4564-acb3-f60c9e3b0265), [Implement high-fidelity sync module and expose start API](http://localhost:38388/activity/sessions/1415dd0e-39ce-4bab-a8c1-75e68e51d77b), [Implement high-fidelity sync API and UI status updates](http://localhost:38388/activity/sessions/8def04b4-2554-44d6-bd39-88d1deb58ba3)
+- **LocalTransport for server-mode event propagation** — Oak Teams server now emits its own session-level events so connected clients see sessions created on the server machine; previously `_init_team_sync()` short-circuited in server mode, leaving server-originated sessions invisible to members — [Implement LocalTransport to enable server-mode event syncing](http://localhost:38388/activity/sessions/199895f1-c82e-48ae-9737-2b36bf994eef), [Implement LocalTransport to propagate server-mode events](http://localhost:38388/activity/sessions/3b5f4d85-fd4f-4a76-83f2-c9fcaaddfc08)
+- **Connection status icon in daemon UI** — live connection indicator wired into the team sync UI — [Fix build errors and add connection status icon](http://localhost:38388/activity/sessions/a7e958f3-85ad-4260-b3b2-fe53c039b9fe)
+
+### Fixed
+
+- Fix team-routes Gateway pattern: persistent auth 401 errors from fragile `if server_mode` branches — further hardened the routing layer to consistently authenticate across server and client modes — [Refactor team routes to Gateway pattern, eliminate auth 401 errors](http://localhost:38388/activity/sessions/15b02521-c762-498e-9f9b-6be8d01940a5)
+- Fix `TeamMembers.tsx` reporting zero online members — `MEMBER_ONLINE_THRESHOLD_MS` was declared but never used; replaced with `5 * TIME_UNITS.MS_PER_SECOND` so the online count now matches the members page — [Fix build errors and add connection status icon](http://localhost:38388/activity/sessions/a7e958f3-85ad-4260-b3b2-fe53c039b9fe)
+- Fix `check_upgrade_needed` never flagging an upgrade — function returned `None` without setting `state.upgrade_needed`, silencing the "run `oak upgrade`" prompt — [Fix build errors and add connection status icon](http://localhost:38388/activity/sessions/a7e958f3-85ad-4260-b3b2-fe53c039b9fe)
+- Fix `CloudRelayErrorCode` enum crash from duplicate members — duplicate enum entries caused a `ValueError` on import, preventing the cloud relay module from loading — [Fix build errors and add connection status icon](http://localhost:38388/activity/sessions/a7e958f3-85ad-4260-b3b2-fe53c039b9fe)
+- Fix CI daemon startup failure on fresh clone — missing initialization step prevented `make setup` from starting CI; quickstart documentation updated to reflect the correct sequence — [Debug CI start failure and clarify quickstart documentation](http://localhost:38388/activity/sessions/8f306970-2883-48a4-be27-023144cead36)
+
+### Changed
+
+- Integration tests refactored for comprehensive multi-language coverage — test suite reorganized to exercise all supported programming languages with a consistent, thorough strategy — [Refactor Oak integration tests for comprehensive language coverage](http://localhost:38388/activity/sessions/3bd94870-738d-42fd-8846-9b5fc13dfd21)
+
+### Notes
+
+> **Gotcha**: `TeamStatus.tsx` expects the backend to return a `status` field; a missing or mistyped field causes the component to silently render an empty status with no error. Add a defensive default or null-check when extending the `/team` endpoint.
+
+> **Gotcha**: The outbox worker does not buffer events locally — if the server is offline when a sync is attempted, the payload is discarded immediately. Changes made while the server is unreachable are lost until a new sync cycle runs after reconnection. See [`team/outbox/worker.py`](src/open_agent_kit/features/codebase_intelligence/team/outbox/worker.py).
+
+## [2026-02-27]
+
+### Added
+
+- **Oak Teams single-page Join flow** — redesigned team onboarding UX replaces the multi-step Cloudflare-Worker-relay approach with a single seamless flow; a client enters the server URL and receives a bearer token in one page, eliminating manual relay configuration — [Plan Oak Teams single‑page Join flow architecture](http://localhost:38388/activity/sessions/ae7106de-16a8-491c-97ce-c2f8ce41f943), [Implement Oak Teams single‑page Join flow API endpoint](http://localhost:38388/activity/sessions/38278353-f814-46f2-a9f7-5a68a807dbc9)
+
+### Notes
+
+> **Gotcha**: The Join flow requires the server's auto-generated machine key to be present in the config override file (`config/team.py`). A missing or corrupted file causes join requests to be rejected with a 404 from the relay. Verify the file exists before testing the flow.
+
+> **Gotcha**: The Join approval flow is synchronous — the daemon writes approval immediately to SQLite but the client UI does not poll for status. Users see no feedback until a manual refresh.
+
+> **Gotcha**: Do not use the Join flow on the machine acting as the team server. This causes authentication conflicts. Client machines must join from a separate device using a member API key generated on the server.
+
+## [2026-02-26]
+
+### Added
+
+- **Oak Teams outbox schema and sync worker** — new `outbox` table and database migration replace the previous git-based CI sync with a self-hosted team server; a background sync worker queues events for guaranteed ordered delivery — [Implement outbox schema and sync worker for Oak Teams](http://localhost:38388/activity/sessions/9407ac76-5b89-4b48-89f4-89e0ec1fb68c), [Add outbox schema and migration for Oak Teams sync](http://localhost:38388/activity/sessions/aceb5769-42bb-41f3-820d-ba1a544aa685)
+- **Persistent team and relay status banner** — new banner beneath `UpdateBanner` in `Layout.tsx` surfaces live team and cloud relay health across every page; companion dashboard tiles provide an at-a-glance health view on the daemon home screen — [Update UI with persistent team status banner and dashboard tiles](http://localhost:38388/activity/sessions/31220976-a1a8-4ba8-9f7a-fb0fcb7230f4), [Add persistent team status banner and dashboard tiles via enriched status API](http://localhost:38388/activity/sessions/607d0ad6-5ea1-434a-8468-e0ffe6da41f6)
+- **Centralized feature-flag system** — Oak API refactored around a unified flag registry; feature availability is now controlled via typed, testable guards rather than ad-hoc conditionals, and new flags can be rolled out without code-path changes _(part of the 2/25 Oak API refactoring, not previously documented)_ — [Refactor Oak API and implement centralized feature‑flag system](http://localhost:38388/activity/sessions/f53e0953-a76f-41b9-8858-cdc386156d14)
+- **Secure bearer token for team identity** — team join tokens upgraded from plain unique strings to cryptographically secure bearer tokens; the loopback API key is now persisted on first creation and reused across daemon restarts, eliminating unbounded key proliferation in the database — [Implement secure bearer token generation and storage for Oak](http://localhost:38388/activity/sessions/0b893a97-a339-4c8b-830b-2ff9a869e2e5)
+
+### Fixed
+
+- Fix Cursor session capture: missing `SESSION_SECRET` caused hook sessions to be silently dropped — identified that `SESSION_SECRET` was absent from the Cursor hook execution environment in the conduit-test-poc project; correcting propagation restores session capture — [Debug missing SESSION_SECRET causing cursor session failure](http://localhost:38388/activity/sessions/b44b649e-c44b-4427-8044-aae8098e63f9), [Fix cursor session capture logic, cherry‑pick minimal changes, clean PR](http://localhost:38388/activity/sessions/f93e6018-d5dd-45a0-b219-883feb21e7fc)
+- Fix `hooks.py` stdin reader returning `None` on empty stream — `_stdin_reader` left `result_holder[0]` as `None` when stdin was empty (e.g., non-interactive CI environments), causing downstream `TypeError`; now falls back to an empty string — [Fix cursor session capture logic, cherry‑pick minimal changes, clean PR](http://localhost:38388/activity/sessions/f93e6018-d5dd-45a0-b219-883feb21e7fc)
+- Fix `oak ci hook` crash from unsupported `--timeout=30` flag — the CLI `__main__.py` does not recognise this argument, causing `SystemExit` before the hook executes; removed the unsupported flag from hook invocations — [Fix cursor session capture logic, cherry‑pick minimal changes, clean PR](http://localhost:38388/activity/sessions/f93e6018-d5dd-45a0-b219-883feb21e7fc)
+- Fix docs site build failure: Astro 5.17.1 incompatible with Starlight ≥0.34.8 — bumped Astro to 5.18.0 and updated Starlight and Sharp to latest compatible versions — [Update Astro, Starlight, Sharp to latest versions](http://localhost:38388/activity/sessions/057d65c3-12d8-4cf6-bbbc-16f586bf53c9)
+
+### Changed
+
+- OAK Agents docs reorganized — sections restructured and architecture diagram refined for clearer onboarding — [Update OAK Agents docs: reorganize section refine diagram](http://localhost:38388/activity/sessions/9139ba09-a96d-4575-93f4-4d82928da4ea)
+
+### Notes
+
+> **Gotcha**: Oak Teams sync stores events as plain strings in SQLite — team keys are indexed but not hashed at rest. Secure the daemon database (`.oak/ci/activities.db`) with appropriate file permissions.
+
+> **Gotcha**: The persistent team-status banner polls the daemon's enriched `/team` endpoint, which requires the `X-OpenAgent-Team-Key` header. A missing or invalid key returns a generic 401 with no detail — verify the key is set in `.oak/config.yaml`.
+
+> **Gotcha**: `SESSION_SECRET` must be present in the environment where Cursor hooks execute. If absent, the hook drops the session silently and logs a `[DROP]` message. Check `.cursor/hooks.json` environment configuration if Cursor sessions are not appearing in the activity log.
+
+> **Gotcha**: Oak Teams API keys serve two purposes — loopback (internal daemon communication) and user-generated (external access) — both stored in the same SQLite table. A missing unique constraint or column mismatch can cause silent key duplication. Inspect [`team/server/auth.py`](src/open_agent_kit/features/codebase_intelligence/team/server/auth.py) if duplicate loopback keys appear after a daemon restart.
+
 ## [2026-02-25]
 
 ### Added

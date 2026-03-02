@@ -234,6 +234,7 @@ def end_prompt_batch(store: ActivityStore, batch_id: int) -> None:
         store: The ActivityStore instance.
         batch_id: Prompt batch to end.
     """
+    ended_at = datetime.now().isoformat()
     with store._transaction() as conn:
         conn.execute(
             """
@@ -241,8 +242,9 @@ def end_prompt_batch(store: ActivityStore, batch_id: int) -> None:
             SET ended_at = ?, status = 'completed'
             WHERE id = ?
             """,
-            (datetime.now().isoformat(), batch_id),
+            (ended_at, batch_id),
         )
+
     logger.debug(f"Ended prompt batch {batch_id}")
 
 
@@ -290,6 +292,7 @@ def update_prompt_batch_response(
             "UPDATE prompt_batches SET response_summary = ? WHERE id = ?",
             (truncated, batch_id),
         )
+
     logger.debug(f"Updated response summary for batch {batch_id}")
 
 
@@ -336,6 +339,7 @@ def update_prompt_batch_source_type(
                 """,
                 (source_type, batch_id),
             )
+
     logger.debug(f"Updated prompt batch {batch_id} source_type to {source_type}")
 
 

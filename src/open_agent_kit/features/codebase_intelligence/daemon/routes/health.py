@@ -22,7 +22,6 @@ from open_agent_kit.features.codebase_intelligence.constants import (
     CI_DATA_DIR,
     CI_HOOKS_LOG_FILE,
     CI_LOG_FILE,
-    CI_STATUS_KEY_TUNNEL,
     DAEMON_STATUS_HEALTHY,
     DAEMON_STATUS_RUNNING,
     LOG_FILE_ACP,
@@ -32,10 +31,6 @@ from open_agent_kit.features.codebase_intelligence.constants import (
     LOG_LINES_DEFAULT,
     LOG_LINES_MAX,
     LOG_LINES_MIN,
-    TUNNEL_RESPONSE_KEY_ACTIVE,
-    TUNNEL_RESPONSE_KEY_PROVIDER,
-    TUNNEL_RESPONSE_KEY_PUBLIC_URL,
-    TUNNEL_RESPONSE_KEY_STARTED_AT,
     VALID_LOG_FILES,
 )
 from open_agent_kit.features.codebase_intelligence.daemon.models import HealthResponse
@@ -180,7 +175,6 @@ async def get_status() -> dict:
         },
         "storage": _get_storage_stats(state.project_root),
         "backup": _get_backup_summary(state.project_root),
-        CI_STATUS_KEY_TUNNEL: _get_tunnel_status(state),
         "version": {
             "running": VERSION,
             "installed": state.installed_version,
@@ -191,6 +185,8 @@ async def get_status() -> dict:
             "config_version_outdated": state.config_version_outdated,
             "pending_migrations": state.pending_migration_count,
         },
+        "team": _get_team_status(state),
+        "cloud_relay": _get_cloud_relay_status(state),
     }
 
 
@@ -243,31 +239,63 @@ def _get_backup_summary(project_root: Path | None) -> dict:
     }
 
 
-def _get_tunnel_status(state: object) -> dict:
-    """Get tunnel status for the status endpoint.
+def _get_team_status(state: object) -> dict | None:
+    """Get team sync status for the status endpoint.
 
     Args:
         state: DaemonState instance.
 
     Returns:
-        Tunnel status dictionary.
+        Team status dictionary, or None if not configured.
     """
-    # Avoid circular import by accessing attribute dynamically
-    tunnel_provider = getattr(state, "tunnel_provider", None)
-    if tunnel_provider is None:
-        return {
-            TUNNEL_RESPONSE_KEY_ACTIVE: False,
-            TUNNEL_RESPONSE_KEY_PUBLIC_URL: None,
-            TUNNEL_RESPONSE_KEY_PROVIDER: None,
-            TUNNEL_RESPONSE_KEY_STARTED_AT: None,
-        }
+    relay_client = getattr(state, "cloud_relay_client", None)
+    sync_worker = getattr(state, "team_sync_worker", None)
 
-    status = tunnel_provider.get_status()
+    if relay_client is None and sync_worker is None:
+        return None
+
+    team_status: dict = {
+        "configured": relay_client is not None,
+        "connected": relay_client is not None and relay_client.get_status().connected,
+        "members_online": len(getattr(relay_client, "online_nodes", [])) if relay_client else 0,
+    }
+
+    if sync_worker is not None:
+        team_status["sync"] = sync_worker.get_status().model_dump()
+
+    return team_status
+
+
+def _get_cloud_relay_status(state: object) -> dict | None:
+    """Get cloud relay status for the status endpoint.
+
+    Args:
+        state: DaemonState instance.
+
+    Returns:
+        Cloud relay status dictionary, or None if not connected.
+    """
+    client = getattr(state, "cloud_relay_client", None)
+    if client is None:
+        return None
+
+    relay_status = client.get_status()
+    if not relay_status.connected:
+        return None
+
+    worker_url = relay_status.worker_url
+    mcp_endpoint = None
+    if worker_url:
+        from open_agent_kit.features.codebase_intelligence.constants import (
+            CLOUD_RELAY_MCP_ENDPOINT_SUFFIX,
+        )
+
+        mcp_endpoint = worker_url + CLOUD_RELAY_MCP_ENDPOINT_SUFFIX
+
     return {
-        TUNNEL_RESPONSE_KEY_ACTIVE: status.active,
-        TUNNEL_RESPONSE_KEY_PUBLIC_URL: status.public_url,
-        TUNNEL_RESPONSE_KEY_PROVIDER: status.provider_name,
-        TUNNEL_RESPONSE_KEY_STARTED_AT: status.started_at,
+        "connected": True,
+        "worker_url": worker_url,
+        "mcp_endpoint": mcp_endpoint,
     }
 
 
