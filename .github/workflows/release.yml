@@ -124,7 +124,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download Python packages
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: python-packages
           path: release-files
@@ -235,7 +235,7 @@ jobs:
     environment: pypi
     steps:
       - name: Download Python packages
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: python-packages
           path: dist/
@@ -251,7 +251,7 @@ jobs:
     environment: testpypi
     steps:
       - name: Download Python packages
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: python-packages
           path: dist/
