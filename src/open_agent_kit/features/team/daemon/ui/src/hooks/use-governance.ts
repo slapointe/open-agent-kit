@@ -184,7 +184,7 @@ export function useSaveGovernanceConfig() {
 export function useGovernanceAudit(params: AuditQueryParams) {
     return usePowerQuery({
         queryKey: governanceKeys.audit(params),
-        queryFn: ({ signal }) => fetchAuditEvents(params, signal),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchAuditEvents(params, signal),
         refetchInterval: 15000,
         pollCategory: "realtime",
         placeholderData: (previousData: AuditListResponse | undefined) => previousData,
@@ -195,7 +195,7 @@ export function useGovernanceAudit(params: AuditQueryParams) {
 export function useGovernanceAuditSummary(days = 7) {
     return usePowerQuery({
         queryKey: governanceKeys.auditSummary(days),
-        queryFn: ({ signal }) => fetchAuditSummary(days, signal),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchAuditSummary(days, signal),
         refetchInterval: 30000,
         pollCategory: "standard",
     });

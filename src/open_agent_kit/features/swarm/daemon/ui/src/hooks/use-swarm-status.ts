@@ -12,7 +12,7 @@ interface SwarmStatus {
 export function useSwarmStatus() {
     return usePowerQuery<SwarmStatus>({
         queryKey: ["swarm", "status"],
-        queryFn: ({ signal }) => fetchJson(API_ENDPOINTS.SWARM_STATUS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(API_ENDPOINTS.SWARM_STATUS, { signal }),
         refetchInterval: SWARM_STATUS_POLL_MS,
         pollCategory: "heartbeat",
     });

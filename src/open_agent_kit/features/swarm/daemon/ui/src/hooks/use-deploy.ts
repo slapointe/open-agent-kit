@@ -24,7 +24,7 @@ interface AuthStatus {
 export function useDeployStatus() {
     return usePowerQuery<DeployStatus>({
         queryKey: ["deploy", "status"],
-        queryFn: ({ signal }) => fetchJson(API_ENDPOINTS.DEPLOY_STATUS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(API_ENDPOINTS.DEPLOY_STATUS, { signal }),
         refetchInterval: DEPLOY_POLL_MS,
         pollCategory: "standard",
     });
@@ -33,7 +33,7 @@ export function useDeployStatus() {
 export function useDeployAuth() {
     return usePowerQuery<AuthStatus>({
         queryKey: ["deploy", "auth"],
-        queryFn: ({ signal }) => fetchJson(API_ENDPOINTS.DEPLOY_AUTH, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(API_ENDPOINTS.DEPLOY_AUTH, { signal }),
         refetchInterval: false,
     });
 }

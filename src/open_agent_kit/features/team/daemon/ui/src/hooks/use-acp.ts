@@ -25,7 +25,7 @@ const ACP_STATUS_REFETCH_INTERVAL_MS = 10000;
 export function useAcpStatus() {
     return usePowerQuery<AcpStatus>({
         queryKey: ["acp-status"],
-        queryFn: ({ signal }) => fetchJson(API_ENDPOINTS.ACP_STATUS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(API_ENDPOINTS.ACP_STATUS, { signal }),
         refetchInterval: ACP_STATUS_REFETCH_INTERVAL_MS,
         pollCategory: "standard",
     });

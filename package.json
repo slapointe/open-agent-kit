@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "workspaces": [
+    "src/open_agent_kit/ui/shared",
+    "src/open_agent_kit/features/team/daemon/ui",
+    "src/open_agent_kit/features/swarm/daemon/ui"
+  ]
+}

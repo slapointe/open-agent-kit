@@ -98,7 +98,7 @@ const BACKUP_STATUS_REFETCH_INTERVAL_MS = 60000;
 export function useBackupStatus() {
     return usePowerQuery<BackupStatus>({
         queryKey: ["backup-status"],
-        queryFn: ({ signal }) => fetchJson(API_ENDPOINTS.BACKUP_STATUS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(API_ENDPOINTS.BACKUP_STATUS, { signal }),
         refetchInterval: BACKUP_STATUS_REFETCH_INTERVAL_MS,
         pollCategory: "standard",
     });

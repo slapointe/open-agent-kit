@@ -174,9 +174,9 @@ export function useAgentRuns(limit = 20, offset = 0, agentName?: string, status?
     if (agentName) params.set("agent_name", agentName);
     if (status) params.set("status", status);
 
-    const query = usePowerQuery({
+    const query = usePowerQuery<AgentRunListResponse>({
         queryKey: ["agent-runs", limit, offset, agentName, status],
-        queryFn: ({ signal }) => fetchJson<AgentRunListResponse>(`${API_ENDPOINTS.AGENT_RUNS}?${params}`, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson<AgentRunListResponse>(`${API_ENDPOINTS.AGENT_RUNS}?${params}`, { signal }),
         staleTime: 5000,
         placeholderData: (previousData: AgentRunListResponse | undefined) => previousData,
         pollCategory: "self_managing",
@@ -195,9 +195,9 @@ export function useAgentRuns(limit = 20, offset = 0, agentName?: string, status?
 
 /** Fetch single agent run by ID with smart polling */
 export function useAgentRun(runId: string | null) {
-    return usePowerQuery({
+    return usePowerQuery<{ run: AgentRun }>({
         queryKey: ["agent-runs", runId],
-        queryFn: ({ signal }) => fetchJson<{ run: AgentRun }>(`${API_ENDPOINTS.AGENT_RUNS}/${runId}`, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson<{ run: AgentRun }>(`${API_ENDPOINTS.AGENT_RUNS}/${runId}`, { signal }),
         enabled: !!runId,
         staleTime: 2000,
         pollCategory: "self_managing",

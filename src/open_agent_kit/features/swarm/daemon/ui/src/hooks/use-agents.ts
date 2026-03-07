@@ -62,7 +62,7 @@ interface AgentRunResponse {
 export function useAgents() {
     return usePowerQuery<AgentListResponse>({
         queryKey: ["agents"],
-        queryFn: ({ signal }) => fetchJson(API_ENDPOINTS.AGENTS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(API_ENDPOINTS.AGENTS, { signal }),
         refetchInterval: AGENTS_POLL_MS,
         pollCategory: "standard",
     });
@@ -71,7 +71,7 @@ export function useAgents() {
 export function useAgentRuns(limit = 20) {
     return usePowerQuery<AgentRunListResponse>({
         queryKey: ["agent-runs", limit],
-        queryFn: ({ signal }) =>
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
             fetchJson(`${API_ENDPOINTS.AGENTS_RUNS}?limit=${limit}`, { signal }),
         refetchInterval: AGENT_RUNS_POLL_MS,
         pollCategory: "standard",

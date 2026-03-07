@@ -12,7 +12,7 @@ interface LogsResponse {
 export function useLogs(lines: number = 500, enabled: boolean = true) {
     return usePowerQuery<LogsResponse>({
         queryKey: ["logs", lines],
-        queryFn: ({ signal }) => fetchJson(`${API_ENDPOINTS.LOGS}?lines=${lines}`, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(`${API_ENDPOINTS.LOGS}?lines=${lines}`, { signal }),
         refetchInterval: enabled ? LOGS_POLL_MS : false,
         pollCategory: "realtime",
     });

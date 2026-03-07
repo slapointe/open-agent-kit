@@ -98,7 +98,7 @@ export interface DaemonStatus {
 export function useStatus() {
     return usePowerQuery<DaemonStatus>({
         queryKey: ["status"],
-        queryFn: ({ signal }) => fetchJson(API_ENDPOINTS.STATUS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(API_ENDPOINTS.STATUS, { signal }),
         refetchInterval: (query) => {
             const data = query.state.data;
             if (!data) return STATUS_POLL_ACTIVE_MS;

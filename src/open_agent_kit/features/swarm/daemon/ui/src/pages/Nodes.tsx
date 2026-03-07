@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@oak/ui/components/ui/card";
 import { Hexagon } from "lucide-react";
-import { useSwarmNodes, useRemoveNode } from "@/hooks/use-swarm-nodes";
+import { useSwarmNodes, useRemoveNode, type SwarmNode } from "@/hooks/use-swarm-nodes";
 import { SwarmInviteCard, NodeCard } from "@/components/nodes";
 
 export default function Nodes() {
@@ -52,7 +52,7 @@ export default function Nodes() {
             )}
 
             <div className="grid gap-4">
-                {data?.teams?.map((node) => (
+                {data?.teams?.map((node: SwarmNode) => (
                     <NodeCard
                         key={node.team_id || node.project_slug}
                         node={node}

@@ -3,7 +3,7 @@ import { Button } from "@oak/ui/components/ui/button";
 import { Card, CardContent } from "@oak/ui/components/ui/card";
 import { AGENT_RUN_STATUS } from "@oak/ui/lib/agent-status";
 import { TaskCard, RunHistoryCard } from "@/components/agents";
-import { useAgents, useAgentRuns, useRunTask, useReloadAgents } from "@/hooks/use-agents";
+import { useAgents, useAgentRuns, useRunTask, useReloadAgents, type AgentRun, type AgentTaskListItem } from "@/hooks/use-agents";
 
 export default function Agents() {
     const { data: agentsData, isLoading: agentsLoading } = useAgents();
@@ -15,7 +15,7 @@ export default function Agents() {
     const runs = runsData?.runs ?? [];
 
     const runningTaskNames = new Set(
-        runs.filter((r) => r.status === AGENT_RUN_STATUS.RUNNING && r.task_name).map((r) => r.task_name!)
+        runs.filter((r: AgentRun) => r.status === AGENT_RUN_STATUS.RUNNING && r.task_name).map((r: AgentRun) => r.task_name!)
     );
 
     const handleRunTask = (taskName: string) => {
@@ -57,7 +57,7 @@ export default function Agents() {
                     </Card>
                 )}
                 <div className="grid gap-4 md:grid-cols-2">
-                    {tasks.map((task) => (
+                    {tasks.map((task: AgentTaskListItem) => (
                         <TaskCard
                             key={task.name}
                             name={task.name}
@@ -87,7 +87,7 @@ export default function Agents() {
                     </Card>
                 )}
                 <div className="grid gap-3">
-                    {runs.map((run) => (
+                    {runs.map((run: AgentRun) => (
                         <RunHistoryCard
                             key={run.id}
                             runId={run.id}

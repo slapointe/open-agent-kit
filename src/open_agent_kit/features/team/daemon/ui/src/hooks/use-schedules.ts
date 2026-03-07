@@ -134,7 +134,7 @@ async function syncSchedules(): Promise<ScheduleSyncResponse> {
 export function useSchedules() {
     return usePowerQuery({
         queryKey: scheduleKeys.list(),
-        queryFn: ({ signal }) => fetchSchedules(signal),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchSchedules(signal),
         refetchInterval: 30000,
         pollCategory: "standard",
     });

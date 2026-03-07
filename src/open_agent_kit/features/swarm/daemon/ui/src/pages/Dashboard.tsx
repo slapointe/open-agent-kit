@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@oak/ui/components/ui/
 import { StatCard } from "@oak/ui/components/ui/config/stat-card";
 import { useSwarmStatus } from "@/hooks/use-swarm-status";
 import { useSwarmNodes } from "@/hooks/use-swarm-nodes";
-import { useAgents, useAgentRuns, useRunTask } from "@/hooks/use-agents";
+import { useAgents, useAgentRuns, useRunTask, type AgentTaskListItem, type AgentRun } from "@/hooks/use-agents";
 import { RunHistoryCard } from "@/components/agents";
 
 export default function Dashboard() {
@@ -68,7 +68,7 @@ export default function Dashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="flex flex-wrap gap-2">
-                            {(agentsData?.tasks ?? []).slice(0, 4).map((task) => (
+                            {(agentsData?.tasks ?? []).slice(0, 4).map((task: AgentTaskListItem) => (
                                 <Button
                                     key={task.name}
                                     variant="outline"
@@ -90,7 +90,7 @@ export default function Dashboard() {
                 <div>
                     <h2 className="text-lg font-semibold mb-3">Recent Runs</h2>
                     <div className="grid gap-3">
-                        {recentRuns.map((run) => (
+                        {recentRuns.map((run: AgentRun) => (
                             <RunHistoryCard
                                 key={run.id}
                                 runId={run.id}

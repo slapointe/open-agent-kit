@@ -49,7 +49,7 @@ interface SwarmMutationResult {
 export function useSwarmStatus() {
     return usePowerQuery<SwarmStatusResponse>({
         queryKey: ["swarm", "status"],
-        queryFn: ({ signal }) => fetchJson<SwarmStatusResponse>(API_ENDPOINTS.SWARM_STATUS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson<SwarmStatusResponse>(API_ENDPOINTS.SWARM_STATUS, { signal }),
         refetchInterval: SWARM_STATUS_POLL_MS,
         pollCategory: "standard",
     });
@@ -81,7 +81,7 @@ export function useLeaveSwarm() {
 export function useSwarmAdvisories() {
     return usePowerQuery<SwarmAdvisoriesResponse>({
         queryKey: ["swarm", "advisories"],
-        queryFn: ({ signal }) =>
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
             fetchJson<SwarmAdvisoriesResponse>(API_ENDPOINTS.SWARM_ADVISORIES, { signal }),
         refetchInterval: SWARM_STATUS_POLL_MS,
         pollCategory: "standard",
@@ -110,7 +110,7 @@ interface SwarmDaemonLaunchResponse {
 export function useSwarmDaemonStatus(enabled: boolean) {
     return usePowerQuery<SwarmDaemonStatusResponse>({
         queryKey: ["swarm", "daemon", "status"],
-        queryFn: ({ signal }) =>
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
             fetchJson<SwarmDaemonStatusResponse>(API_ENDPOINTS.SWARM_DAEMON_STATUS, { signal }),
         refetchInterval: SWARM_STATUS_POLL_MS,
         pollCategory: "standard",

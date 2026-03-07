@@ -134,7 +134,7 @@ const teamKeys = {
 export function useTeamStatus() {
     return usePowerQuery<TeamStatusResponse>({
         queryKey: teamKeys.status(),
-        queryFn: ({ signal }) => fetchJson<TeamStatusResponse>(API_ENDPOINTS.TEAM_STATUS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson<TeamStatusResponse>(API_ENDPOINTS.TEAM_STATUS, { signal }),
         refetchInterval: TEAM_STATUS_POLL_MS,
         pollCategory: "standard",
         staleTime: 3000,
@@ -145,7 +145,7 @@ export function useTeamStatus() {
 export function useTeamMembers() {
     return usePowerQuery<TeamMembersResponse>({
         queryKey: teamKeys.members(),
-        queryFn: ({ signal }) => fetchJson<TeamMembersResponse>(API_ENDPOINTS.TEAM_MEMBERS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson<TeamMembersResponse>(API_ENDPOINTS.TEAM_MEMBERS, { signal }),
         refetchInterval: TEAM_MEMBERS_POLL_MS,
         pollCategory: "standard",
         staleTime: 10000,

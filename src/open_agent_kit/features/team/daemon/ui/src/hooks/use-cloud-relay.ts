@@ -77,7 +77,7 @@ const CLOUD_RELAY_STATUS_REFETCH_INTERVAL_MS = 30_000;
 export function useCloudRelayStatus() {
     return usePowerQuery<CloudRelayStatus>({
         queryKey: ["cloud-relay-status"],
-        queryFn: ({ signal }) => fetchJson(API_ENDPOINTS.CLOUD_RELAY_STATUS, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(API_ENDPOINTS.CLOUD_RELAY_STATUS, { signal }),
         refetchInterval: CLOUD_RELAY_STATUS_REFETCH_INTERVAL_MS,
         pollCategory: "standard",
     });

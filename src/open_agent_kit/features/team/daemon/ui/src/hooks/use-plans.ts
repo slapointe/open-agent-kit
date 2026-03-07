@@ -36,7 +36,7 @@ export function usePlans(options: UsePlansOptions = {}) {
     return usePowerQuery<PlansListResponse>({
         queryKey: ["plans", limit, offset, sessionId, sort],
         pollCategory: "standard",
-        queryFn: ({ signal }) => {
+        queryFn: ({ signal }: { signal: AbortSignal }) => {
             const params = new URLSearchParams({
                 limit: String(limit),
                 offset: String(offset),

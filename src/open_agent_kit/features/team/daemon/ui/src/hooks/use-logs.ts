@@ -25,7 +25,7 @@ export const DEFAULT_LOG_FILE = LOG_FILES.DAEMON;
 export function useLogs(lines: number = DEFAULT_LOG_LINES, file: LogFileType = DEFAULT_LOG_FILE, enabled: boolean = true) {
     return usePowerQuery<LogResponse>({
         queryKey: ["logs", lines, file],
-        queryFn: ({ signal }) => fetchJson(`${API_ENDPOINTS.LOGS}?lines=${lines}&file=${file}`, { signal }),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJson(`${API_ENDPOINTS.LOGS}?lines=${lines}&file=${file}`, { signal }),
         refetchInterval: enabled ? LOGS_POLL_INTERVAL_MS : false,
         pollCategory: "realtime",
     });
