@@ -17,6 +17,13 @@ protocol = "json"
 [mcp_servers.oak-ci]
 command = "oak-dev"
 args = [
-    "ci",
+    "team",
+    "mcp",
+]
+
+[mcp_servers.oak-swarm]
+command = "oak-dev"
+args = [
+    "swarm",
     "mcp",
 ]

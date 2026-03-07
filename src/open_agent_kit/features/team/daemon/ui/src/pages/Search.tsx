@@ -1,0 +1,373 @@
+import { useState } from "react";
+import { useSearch } from "@/hooks/use-search";
+import { useNetworkSearch } from "@/hooks/use-network-search";
+import { useTeamStatus } from "@/hooks/use-team";
+import { Button } from "@oak/ui/components/ui/button";
+import { Input, Select } from "@/components/ui/config-components";
+import { Link, useSearchParams } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@oak/ui/components/ui/card";
+import { Search as SearchIcon, FileText, Loader2, AlertCircle, Brain, ClipboardList, MessageSquare, Globe } from "lucide-react";
+import {
+    FALLBACK_MESSAGES,
+    SCORE_DISPLAY_PRECISION,
+    CONFIDENCE_FILTER_OPTIONS,
+    CONFIDENCE_BADGE_CLASSES,
+    DOC_TYPE_BADGE_CLASSES,
+    DOC_TYPE_LABELS,
+    OBSERVATION_STATUS_BADGE_CLASSES,
+    OBSERVATION_STATUS_LABELS,
+    OBSERVATION_STATUSES,
+    SEARCH_TYPE_OPTIONS,
+    SEARCH_TYPES,
+    type ConfidenceFilter,
+    type ConfidenceLevel,
+    type DocType,
+    type ObservationStatus,
+    type SearchType,
+} from "@/lib/constants";
+import type { CodeResult, MemoryResult, PlanResult, SessionResult } from "@/hooks/use-search";
+
+// Valid search type values for URL param validation
+const VALID_SEARCH_TYPES = Object.values(SEARCH_TYPES) as string[];
+
+export default function Search() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [query, setQuery] = useState("");
+    const [debouncedQuery, setDebouncedQuery] = useState("");
+    const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>("all");
+    const [applyDocTypeWeights, setApplyDocTypeWeights] = useState(true);
+    const [includeResolved, setIncludeResolved] = useState(false);
+
+    // Initialize searchType from URL param, defaulting to ALL
+    const tabParam = searchParams.get("tab");
+    const initialSearchType = tabParam && VALID_SEARCH_TYPES.includes(tabParam)
+        ? tabParam as SearchType
+        : SEARCH_TYPES.ALL;
+    const [searchType, setSearchType] = useState<SearchType>(initialSearchType);
+
+    // Sync URL when searchType changes
+    const handleSearchTypeChange = (newType: SearchType) => {
+        setSearchType(newType);
+        if (newType === SEARCH_TYPES.ALL) {
+            searchParams.delete("tab");
+        } else {
+            searchParams.set("tab", newType);
+        }
+        setSearchParams(searchParams, { replace: true });
+    };
+
+    const [includeNetwork, setIncludeNetwork] = useState(false);
+
+    const { data: teamStatus } = useTeamStatus();
+    const relayConnected = teamStatus?.connected ?? false;
+
+    const { data: results, isLoading, error } = useSearch(debouncedQuery, confidenceFilter, applyDocTypeWeights, searchType, includeResolved);
+
+    const isCodeSearch = searchType === SEARCH_TYPES.CODE;
+    const networkEnabled = includeNetwork && !isCodeSearch && relayConnected;
+    const { data: networkResults, isLoading: networkLoading } = useNetworkSearch(
+        debouncedQuery,
+        searchType,
+        20,
+        networkEnabled,
+    );
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        setDebouncedQuery(query);
+    };
+
+    if (error) {
+        return (
+            <div className="space-y-6 max-w-4xl mx-auto">
+                <div className="flex flex-col gap-2">
+                    <h1 className="text-3xl font-bold tracking-tight">Semantic Search</h1>
+                    <p className="text-muted-foreground">Search across your codebase, memories, and plans using natural language.</p>
+                </div>
+                <div className="p-4 border border-red-200 bg-red-50 rounded-md text-red-800 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5" />
+                    <div>
+                        <p className="font-medium">Search unavailable</p>
+                        <p className="text-sm">{error instanceof Error ? error.message : "Detailed search backend error."} Check your <Link to="/config" className="underline font-semibold">configuration</Link>.</p>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    const hasResults = results?.code?.length || results?.memory?.length || results?.plans?.length || results?.sessions?.length;
+
+    return (
+        <div className="space-y-6 max-w-4xl mx-auto">
+            <div className="flex flex-col gap-2">
+                <h1 className="text-3xl font-bold tracking-tight">Semantic Search</h1>
+                <p className="text-muted-foreground">Search across your codebase, memories, and plans using natural language.</p>
+            </div>
+
+            <form onSubmit={handleSearch} className="flex gap-2 flex-wrap">
+                <Input
+                    placeholder="e.g. 'How is authentication handled?'"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className="flex-1 min-w-[200px]"
+                />
+                <Select
+                    value={searchType}
+                    onChange={(e) => handleSearchTypeChange(e.target.value as SearchType)}
+                    className="w-40"
+                >
+                    {SEARCH_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                        </option>
+                    ))}
+                </Select>
+                <Select
+                    value={confidenceFilter}
+                    onChange={(e) => setConfidenceFilter(e.target.value as ConfidenceFilter)}
+                    className="w-40"
+                >
+                    {CONFIDENCE_FILTER_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                        </option>
+                    ))}
+                </Select>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap">
+                    <input
+                        type="checkbox"
+                        checked={applyDocTypeWeights}
+                        onChange={(e) => setApplyDocTypeWeights(e.target.checked)}
+                        className="rounded border-gray-300"
+                    />
+                    Weight by type
+                </label>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap">
+                    <input
+                        type="checkbox"
+                        checked={includeResolved}
+                        onChange={(e) => setIncludeResolved(e.target.checked)}
+                        className="rounded border-gray-300"
+                    />
+                    Include resolved
+                </label>
+                {relayConnected && (
+                    <label
+                        className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap"
+                        title={isCodeSearch ? "Code search is project-specific and cannot be shared across the network" : "Search across connected team nodes"}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={includeNetwork && !isCodeSearch}
+                            onChange={(e) => setIncludeNetwork(e.target.checked)}
+                            disabled={isCodeSearch}
+                            className="rounded border-gray-300"
+                        />
+                        Include team network
+                    </label>
+                )}
+                <Button type="submit" disabled={!query || isLoading}>
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <SearchIcon className="w-4 h-4 mr-2" />}
+                    Search
+                </Button>
+            </form>
+
+            <div className="space-y-4">
+                {results?.code && results.code.length > 0 && (
+                    <div>
+                        <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                            <FileText className="w-5 h-5" /> Code Matches ({results.code.length})
+                        </h2>
+                        <div className="space-y-3">
+                            {results.code.map((match: CodeResult, i: number) => (
+                                <Card key={`code-${i}`} className="overflow-hidden">
+                                    <CardHeader className="py-3 bg-muted/30 space-y-1.5">
+                                        <CardTitle className="text-sm font-mono truncate">
+                                            <span className="text-primary">{match.filepath}</span>
+                                            {match.name && <span className="text-muted-foreground"> ({match.name})</span>}
+                                        </CardTitle>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-xs px-2 py-0.5 rounded ${DOC_TYPE_BADGE_CLASSES[match.doc_type as DocType] || ""}`}>
+                                                {DOC_TYPE_LABELS[match.doc_type as DocType] || match.doc_type}
+                                            </span>
+                                            <span className={`text-xs px-2 py-0.5 rounded capitalize ${CONFIDENCE_BADGE_CLASSES[match.confidence as ConfidenceLevel] || ""}`}>
+                                                {match.confidence}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">Score: {match.relevance?.toFixed(SCORE_DISPLAY_PRECISION)}</span>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="p-4">
+                                        <pre className="text-xs overflow-x-auto p-2 bg-muted/50 rounded-md">
+                                            {match.preview || FALLBACK_MESSAGES.NO_PREVIEW}
+                                        </pre>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {results?.memory && results.memory.length > 0 && (
+                    <div className="mt-8">
+                        <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                            <Brain className="w-5 h-5" /> Memory Matches ({results.memory.length})
+                        </h2>
+                        <div className="space-y-3">
+                            {results.memory.map((match: MemoryResult, i: number) => (
+                                <Card key={`mem-${i}`} className={`overflow-hidden${match.status && match.status !== OBSERVATION_STATUSES.ACTIVE ? " opacity-60" : ""}`}>
+                                    <CardHeader className="py-3 bg-muted/30">
+                                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                            <span className="capitalize badge">{match.memory_type}</span>
+                                            {match.status && match.status !== OBSERVATION_STATUSES.ACTIVE && (
+                                                <span className={`text-xs px-2 py-0.5 rounded-full ${OBSERVATION_STATUS_BADGE_CLASSES[match.status as ObservationStatus] || ""}`}>
+                                                    {OBSERVATION_STATUS_LABELS[match.status as ObservationStatus] || match.status}
+                                                </span>
+                                            )}
+                                            <span className="ml-auto flex items-center gap-2">
+                                                <span className={`text-xs px-2 py-0.5 rounded capitalize ${CONFIDENCE_BADGE_CLASSES[match.confidence as ConfidenceLevel] || ""}`}>
+                                                    {match.confidence}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">Score: {match.relevance?.toFixed(SCORE_DISPLAY_PRECISION)}</span>
+                                            </span>
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-4 text-sm">
+                                        {match.summary}
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {results?.plans && results.plans.length > 0 && (
+                    <div className="mt-8">
+                        <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                            <ClipboardList className="w-5 h-5" /> Plan Matches ({results.plans.length})
+                        </h2>
+                        <div className="space-y-3">
+                            {results.plans.map((match: PlanResult, i: number) => (
+                                <Card key={`plan-${i}`} className="overflow-hidden">
+                                    <CardHeader className="py-3 bg-amber-500/5 border-l-2 border-amber-500">
+                                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                            <span className="text-amber-600">{match.title || "Untitled Plan"}</span>
+                                            <span className="ml-auto flex items-center gap-2">
+                                                <span className={`text-xs px-2 py-0.5 rounded capitalize ${CONFIDENCE_BADGE_CLASSES[match.confidence as ConfidenceLevel] || ""}`}>
+                                                    {match.confidence}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">Score: {match.relevance?.toFixed(SCORE_DISPLAY_PRECISION)}</span>
+                                            </span>
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-4 text-sm">
+                                        <p className="text-muted-foreground">{match.preview}</p>
+                                        {match.session_id && (
+                                            <Link
+                                                to={`/activity/sessions/${match.session_id}`}
+                                                className="text-xs text-primary hover:underline mt-2 inline-block"
+                                            >
+                                                View Session →
+                                            </Link>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {results?.sessions && results.sessions.length > 0 && (
+                    <div className="mt-8">
+                        <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                            <MessageSquare className="w-5 h-5" /> Session Matches ({results.sessions.length})
+                        </h2>
+                        <div className="space-y-3">
+                            {results.sessions.map((match: SessionResult, i: number) => (
+                                <Card key={`session-${i}`} className="overflow-hidden">
+                                    <CardHeader className="py-3 bg-blue-500/5 border-l-2 border-blue-500">
+                                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                            <span className="text-blue-600">{match.title || "Untitled Session"}</span>
+                                            <span className="ml-auto flex items-center gap-2">
+                                                <span className={`text-xs px-2 py-0.5 rounded capitalize ${CONFIDENCE_BADGE_CLASSES[match.confidence as ConfidenceLevel] || ""}`}>
+                                                    {match.confidence}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">Score: {match.relevance?.toFixed(SCORE_DISPLAY_PRECISION)}</span>
+                                            </span>
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-4 text-sm">
+                                        <p className="text-muted-foreground">{match.preview}</p>
+                                        <Link
+                                            to={`/activity/sessions/${match.id}`}
+                                            className="text-xs text-primary hover:underline mt-2 inline-block"
+                                        >
+                                            View Session →
+                                        </Link>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {networkEnabled && networkLoading && (
+                    <div className="mt-8 flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Searching team network...
+                    </div>
+                )}
+
+                {networkResults?.results && networkResults.results.length > 0 && (
+                    <div className="mt-8">
+                        <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                            <Globe className="w-5 h-5" /> Network Results ({networkResults.results.length})
+                        </h2>
+                        <div className="space-y-3">
+                            {networkResults.results.map((match, i) => {
+                                const text = match.observation || match.summary || match.title || match.preview || "";
+                                const subtitle = (match.title && (match.observation || match.summary || match.preview))
+                                    ? match.title
+                                    : undefined;
+                                const body = match.observation || match.summary || match.preview || "";
+                                const typeLabel = match.memory_type || match._result_type;
+
+                                return (
+                                    <Card key={`network-${i}`} className={`overflow-hidden${!text ? " hidden" : ""}`}>
+                                        <CardHeader className="py-3 bg-teal-500/5 border-l-2 border-teal-500">
+                                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                                <span className="text-xs px-2 py-0.5 rounded bg-teal-500/10 text-teal-600 font-mono">
+                                                    {match.machine_id}
+                                                </span>
+                                                {typeLabel && (
+                                                    <span className="capitalize text-muted-foreground">{typeLabel}</span>
+                                                )}
+                                                <span className="ml-auto flex items-center gap-2">
+                                                    {match.confidence && (
+                                                        <span className={`text-xs px-2 py-0.5 rounded capitalize ${CONFIDENCE_BADGE_CLASSES[match.confidence as ConfidenceLevel] || "bg-gray-500/10 text-gray-500"}`}>
+                                                            {match.confidence}
+                                                        </span>
+                                                    )}
+                                                    {match.relevance != null && (
+                                                        <span className="text-xs text-muted-foreground">Score: {match.relevance.toFixed(SCORE_DISPLAY_PRECISION)}</span>
+                                                    )}
+                                                </span>
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-4 text-sm">
+                                            {subtitle && <p className="font-medium mb-1">{subtitle}</p>}
+                                            {body}
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {debouncedQuery && !isLoading && !hasResults && !(networkResults?.results?.length) ? (
+                    <div className="text-center py-12 text-muted-foreground">{FALLBACK_MESSAGES.NO_RESULTS} for "{debouncedQuery}"</div>
+                ) : null}
+            </div>
+        </div>
+    )
+}

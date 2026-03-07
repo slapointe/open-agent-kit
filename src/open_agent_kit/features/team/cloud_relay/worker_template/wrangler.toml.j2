@@ -1,0 +1,39 @@
+name = "{{ worker_name }}"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+workers_dev = true
+
+[durable_objects]
+bindings = [{ name = "RELAY", class_name = "RelayObject" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelayObject"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = []
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1
+
+[vars]
+AGENT_TOKEN = "{{ agent_token }}"
+RELAY_TOKEN = "{{ relay_token }}"
+WORKER_NAME = "{{ worker_name }}"
+{% if custom_domain %}
+WORKER_URL = "https://{{ worker_name }}.{{ custom_domain }}"
+{% else %}
+WORKER_URL = "https://{{ worker_name }}.workers.dev"
+{% endif %}
+{% if custom_domain %}
+
+[[routes]]
+pattern = "{{ worker_name }}.{{ custom_domain }}"
+custom_domain = true
+{% endif %}

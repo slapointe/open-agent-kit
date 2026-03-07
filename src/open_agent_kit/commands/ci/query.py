@@ -7,9 +7,11 @@ from typing import Any
 
 import typer
 
-from open_agent_kit.features.codebase_intelligence.constants import (
+from open_agent_kit.features.team.constants import (
     HTTP_TIMEOUT_QUICK,
     HTTP_TIMEOUT_STANDARD,
+    MCP_TOOL_REMEMBER,
+    MCP_TOOL_SEARCH,
     OBSERVATION_STATUS_ACTIVE,
     VALID_OBSERVATION_STATUSES,
 )
@@ -79,7 +81,7 @@ def ci_memories(
 
     manager = get_daemon_manager(project_root)
     if not manager.is_running():
-        print_error("CI daemon not running. Start with: oak ci start")
+        print_error("CI daemon not running. Start with: oak team start")
         raise typer.Exit(code=1)
 
     # Validate memory type if provided
@@ -93,8 +95,7 @@ def ci_memories(
     # Validate status if provided
     if status not in VALID_OBSERVATION_STATUSES:
         print_error(
-            f"Invalid status '{status}'. Must be one of: "
-            f"{', '.join(VALID_OBSERVATION_STATUSES)}"
+            f"Invalid status '{status}'. Must be one of: {', '.join(VALID_OBSERVATION_STATUSES)}"
         )
         raise typer.Exit(code=1)
 
@@ -221,7 +222,7 @@ def ci_sessions(
 
     manager = get_daemon_manager(project_root)
     if not manager.is_running():
-        print_error("CI daemon not running. Start with: oak ci start")
+        print_error("CI daemon not running. Start with: oak team start")
         raise typer.Exit(code=1)
 
     try:
@@ -329,7 +330,7 @@ def ci_resolve(
 
     manager = get_daemon_manager(project_root)
     if not manager.is_running():
-        print_error("CI daemon not running. Start with: oak ci start")
+        print_error("CI daemon not running. Start with: oak team start")
         raise typer.Exit(code=1)
 
     try:
@@ -394,7 +395,7 @@ def ci_resolve(
 def ci_test(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ) -> None:
-    """Test Codebase Intelligence integration.
+    """Test Team integration.
 
     Runs a series of tests to verify hooks, search, and memory are working.
     """
@@ -404,7 +405,7 @@ def ci_test(
 
     import httpx
 
-    print_header("Codebase Intelligence Integration Test")
+    print_header("Team Integration Test")
 
     manager = get_daemon_manager(project_root)
     port = manager.port
@@ -489,7 +490,7 @@ def ci_test(
             r = client.get(f"{base_url}/api/mcp/tools")
             data = r.json()
             tools = [t["name"] for t in data.get("tools", [])]
-            return "oak_search" in tools and "oak_remember" in tools
+            return MCP_TOOL_SEARCH in tools and MCP_TOOL_REMEMBER in tools
 
     test("MCP tools available", test_mcp_tools)
 

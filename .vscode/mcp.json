@@ -3,7 +3,14 @@
     "oak-ci": {
       "command": "oak-dev",
       "args": [
-        "ci",
+        "team",
+        "mcp"
+      ]
+    },
+    "oak-swarm": {
+      "command": "oak-dev",
+      "args": [
+        "swarm",
         "mcp"
       ]
     }

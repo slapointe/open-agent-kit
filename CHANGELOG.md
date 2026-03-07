@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-03-06]
+
+### Added
+
+- **Secure swarm token storage in environment variables** — Swarm tokens are now stored as environment variables rather than written to config files, enabling cross-machine portability without committing secrets to version control; connecting to a swarm from a new machine no longer requires manually copying config — [Implement secure swarm token storage in environment variables](http://localhost:38388/activity/sessions/9e94dbea-7751-4651-a21f-bfdb4ae8071f), [Configure secure swarm token storage and resolve UI build failures](http://localhost:38388/activity/sessions/be545ca7-c136-4dad-a5bb-e56ac7dec357)
+
+### Fixed
+
+- Fix UI build failure caused by uncommitted `ui/shared/lib/` directory — Git reported the directory existed on disk but was absent from `main`, causing a fatal error during Vite's pre-build step before any TypeScript compilation; fixed by committing the directory and its `log-constants.ts` contents to `main` — [Configure secure swarm token storage and resolve UI build failures](http://localhost:38388/activity/sessions/be545ca7-c136-4dad-a5bb-e56ac7dec357)
+
+### Notes
+
+> **Gotcha**: If `CI_CONFIG_SWARM_KEY_AGENT_TOKEN` is missing or empty, requests to swarm MCP endpoints fail silently with a 401/403 — the error surfaces as a generic network failure with no explicit authentication message in client logs. Always verify the agent token is populated before connecting an MCP client to the swarm. See the agent token retrieval logic in [`swarm/daemon/client.py`](src/open_agent_kit/features/swarm/daemon/client.py).
+
+## [2026-03-05]
+
+### Added
+
+- **Swarm heartbeat advisories and minimum OAK version enforcement** — The swarm heartbeat response now carries advisory messages that peers can surface; a new `min_oak_version` field lets operators enforce a floor version across all swarm members and reject older nodes on connect; includes dedicated health-check endpoints for probing liveness without invoking business logic — [Implement swarm heartbeat advisories and min OAK version configuration](http://localhost:38388/activity/sessions/4597e15a-7dc2-4ac8-8f2d-4636737017fa)
+- **Full swarm autonomous agent functionality** *(in progress)* — Ongoing work to make the Swarm Analyst agent fully autonomous, enabling it to independently discover peers, fan out tasks, and aggregate results without manual orchestration — [Implement full swarm autonomous agent functionality](http://localhost:38388/activity/sessions/18949cd7-ac70-4045-bfe7-c25f4192aa04)
+- **Complete declarative `mcp.yaml` tool list with tests** — The MCP tool registry in `mcp.yaml` is now fully declarative and accurate; new tests verify the runtime tool registry matches the YAML declaration, preventing silent divergence between config and implementation — [Add complete tool list to mcp.yaml and tests](http://localhost:38388/activity/sessions/10176b06-7f5a-4452-b895-d349d814f72f)
+- **Oak skill packaging, export, and benchmark file strategy** — The Oak CI skill bundle can now be exported and packaged for distribution; evaluation/benchmark JSON files follow a defined version-control strategy (tracked in `oak/ci/history/` benchmarks directory); export tests confirm the bundle shape is stable across builds — [Implement Oak skill packaging, export tests, and benchmark file strategy](http://localhost:38388/activity/sessions/a4e36d38-06be-4a39-b8a6-9cc92198cb21)
+- **Debug-level logging and rotating log files for swarm daemon** — Comprehensive debug logging added throughout the swarm daemon; log output now rotates automatically to prevent unbounded disk growth; a rich terminal-style log-viewer UI — matching the team daemon experience — added to the swarm dashboard — [Add debug log level and rotating logs to swarm daemon](http://localhost:38388/activity/sessions/349115b6-be42-4c74-8a23-75d004c44c25)
+
+### Changed
+
+- **Shared log viewer component extracted to `ui/shared/`** — The terminal-style log viewer is now a single shared React component consumed by both the team and swarm daemon UIs (via the `@oak/ui` alias); eliminates duplicated log-rendering logic and ensures consistent behaviour and styling across both surfaces — [Refactor log viewer into shared component for swarm and team daemons](http://localhost:38388/activity/sessions/c8e97337-1d5b-44a5-9ec8-9a4af9cfe822)
+- **Oak skill template refreshed; schema docs regenerated** — The Oak skill template is updated from source and re-exported; `references/schema.md`, `SKILL.md`, and all agent system-prompt files regenerated via `generate_schema_ref.py` to reflect the current schema; the `test_schema_version_matches` gate in `test_skill_service.py` now passes cleanly — [Update Oak skill template and regenerate schema docs](http://localhost:38388/activity/sessions/8027bf73-45e4-40a6-95f5-ab39f5290662)
+
+### Fixed
+
+- Fix swarm daemon restart endpoint failing silently — the `SWARM_AUTH_ENV_VAR` constant was inadvertently removed during a refactor, so the daemon manager never injected `OAK_SWARM_DAEMON_TOKEN` into the subprocess environment; the daemon started without a token, causing an auth error and a UI timeout; constant re-added and manager updated to use it when spawning the daemon
+- Fix swarm `/fetch` endpoint returning `None` for the `function` field — the FastAPI route handler omitted the `function` query parameter from its signature, causing FastAPI to inject `None`; added `function: str = Query(...)` to the handler and ensured it is always echoed in the response
+
+## [2026-03-04]
+
+### Added
+
+- **`features/team/` repository restructure** — Renamed `features/codebase_intelligence/` to `features/team/`, the inner `team/` relay package to `features/team/relay/`, extracted shared agent runtime logic into a new top-level `features/agent_runtime/` package, and moved shared React/Tailwind components into `ui/shared/` (aliased as `@oak/ui` in both Vite configs); the `.oak/ci/` on-disk data path and `CI_DATA_DIR` constant are unchanged — [Refactor codebase intelligence to team feature structure](http://localhost:38388/activity/sessions/1d73badc-b5ec-444d-846a-b05d10fd1651), [Refactor team feature layout, update imports, rebuild UI and daemon](http://localhost:38388/activity/sessions/862a0f96-4b24-4b12-aa73-60ad9f68071d)
+- **Swarm `deploy` subcommand and daemon URL output** — `oak swarm create` now produces a lightweight local config without requiring Cloudflare credentials; a new `oak swarm deploy` command provisions the Cloudflare Worker separately; `oak swarm start` prints the local daemon URL on launch for immediate access — [Refactor swarm create to lightweight config and add deploy command](http://localhost:38388/activity/sessions/363074bf-8a13-494b-b436-cd47991d877e), [Add deploy subcommand, start daemon with URL output and config validation](http://localhost:38388/activity/sessions/1f8f7e70-64a1-4733-97b9-f8675524565b)
+- **Cloudflare Worker activity monitoring with Slack alerts** — Added spike detection for Durable Object reads/writes anomalies; fires a Slack alert when worker activity breaches configurable thresholds, providing early warning before quota overruns — [Implement worker activity monitoring and Slack alerts for spike detection](http://localhost:38388/activity/sessions/8bb16b89-0e77-4415-b9de-bdf9eb4ed810)
+- **Multi-swarm support with auto-port assignment** — Overhauled the Swarm config schema to support multiple concurrent swarm instances; the daemon now auto-assigns a free port when starting a swarm so manual port configuration is no longer required; includes a richer node analytics/health page and searchable node listing in the Swarm UI — [Implement multi‑swarm auto‑port logic and config schema](http://localhost:38388/activity/sessions/2051c8ac-bb59-4b34-b660-03ffe24e9ae1)
+- **`oak swarm restart` CLI and Swarm UI health polling** — Added `oak swarm restart` command for parity with `oak team restart`; the Swarm UI now polls the daemon health endpoint on mount and surfaces a live connectivity badge; also repaired Swarm UI build failures caused by leftover imports from the shared-status refactor — [Implement swarm restart CLI and UI health polling](http://localhost:38388/activity/sessions/8a273164-ab8f-47f1-8e9d-18480f9c1051)
+- **Custom domain support for Swarm worker deployments** — Added a UI input and backend wiring to configure a custom domain when deploying a Swarm worker, mirroring the existing team relay flow; a validation step confirms the domain is reachable before the deployment is committed — [Implement custom domain configuration for Swarm worker deployment](http://localhost:38388/activity/sessions/4d255870-431b-4eb6-a49b-83908994a9b9), [Implement custom domain validation for Swarm worker deployment](http://localhost:38388/activity/sessions/d2383f4a-af3c-48a5-8e0f-e31e27709ebb)
+
+### Fixed
+
+- Fix Cloudflare DO hibernation `rows_read` quota exhaustion — with the WebSocket Hibernation API the DO constructor runs on **every wake** (not just first start); 12 DDL statements (`CREATE TABLE IF NOT EXISTS`, etc.) each read `sqlite_schema` rows, adding up to ~60 rows_read per wake and ~5M rows_read/day—hitting the free-tier ceiling; DDL is now guarded behind a KV-backed `_schema_version` flag and only executes when the schema version constant changes; applied to both `relay-object.ts` (`SCHEMA_VERSION`) and `swarm-object.ts` (`SWARM_SCHEMA_VERSION`) — [Implement worker activity monitoring and Slack alerts for spike detection](http://localhost:38388/activity/sessions/8bb16b89-0e77-4415-b9de-bdf9eb4ed810)
+- Fix upgrade banner never clearing — `parse_base_release()` in [`version.py`](src/open_agent_kit/features/team/utils/version.py) returned `None` when the version string did not match the expected pattern, causing [`version_check.py`](src/open_agent_kit/features/team/daemon/lifecycle/version_check.py) to always evaluate the comparison as "upgrade required"; updated the parsing regex to handle the new semantic-version format and added a fallback that treats an unparsable version as equal to the current base release — [Refactor team feature layout, update imports, rebuild UI and daemon](http://localhost:38388/activity/sessions/862a0f96-4b24-4b12-aa73-60ad9f68071d)
+- Fix UI build failures after restructure — `package.json` scripts in both the team and swarm daemon UIs referenced a non-existent `tsconfig.app.json` path; additionally, the shared TypeScript config `ui/shared/tsconfig.json` was deleted during the refactor while downstream `tsconfig.app.json` files still extended it, causing `tsc -b` to fail with "File not found"; restored the shared config with correct compiler options and updated all `extends` paths — [Refactor team feature layout, update imports, rebuild UI and daemon](http://localhost:38388/activity/sessions/862a0f96-4b24-4b12-aa73-60ad9f68071d)
+- Fix `wrangler` subprocess using wrong working directory for worker deployment — [`worker_deploy_shared.py`](src/open_agent_kit/utils/worker_deploy_shared.py) set `cwd` to the swarm root rather than the `worker_template/` subdirectory, causing Node to fail to resolve `wrangler-dist/cli.js`; `run_cwd` now defaults to the worker template path — [Add deploy subcommand, start daemon with URL output and config validation](http://localhost:38388/activity/sessions/1f8f7e70-64a1-4733-97b9-f8675524565b)
+- Fix OTel Codex agent silently dropping telemetry — the `protocol` field was either missing or using an unsupported value; confirmed correct config requires `protocol = "binary"` nested under `otel.exporter.otlp-http` in the Codex TOML template — [Configure OTel agent for binary encoding usage](http://localhost:38388/activity/sessions/b87d410a-b387-4051-b28b-385ee82c31af)
+- Fix empty federated search result cards in Team UI — the [`use-network-search.ts`](src/open_agent_kit/features/team/daemon/ui/src/hooks/use-network-search.ts) hook destructured the cloud-relay API response using the key `results`, but the endpoint returns data under `data`; every federated result was rendered with an undefined payload, producing blank cards; fixed by updating the destructuring and normalising the shape before passing to the card component — [Fix empty federated search result cards in Team UI search rendering](http://localhost:38388/activity/sessions/f7bdfc52-d3e1-42ce-b05a-1a5c00d247e5)
+- Fix custom domain not honoured during Team Relay deployments — after the repository restructure the [`cloud_relay.py`](src/open_agent_kit/features/team/daemon/routes/cloud_relay.py) deployment route no longer wrote `CLOUD_RELAY_RESPONSE_KEY_CUSTOM_DOMAIN` to the status response, causing the UI to silently fall back to the default `workers.dev` domain even when a custom domain was configured; the missing write was restored — [Fix custom domain not honored during Team Relay deployments](http://localhost:38388/activity/sessions/da18c893-347c-4bc8-8663-ed2a56175942)
+
+### Changed
+
+- CLI namespaces reorganized to match new feature structure — daemon lifecycle commands now live under `oak team` (e.g., `oak team start/stop/restart`); codebase intelligence commands under `oak ci` (e.g., `oak ci index/search/config`); both namespaces expose `oak team mcp` and `oak ci mcp` for backward compatibility — [Refactor codebase intelligence to team feature structure](http://localhost:38388/activity/sessions/1d73badc-b5ec-444d-846a-b05d10fd1651)
+- Extract shared agent runtime route module — duplicated agent-creation, run-polling, and log-streaming logic was present in both the team and swarm daemon route layers; consolidated into a single shared module so both daemons are thin consumers; ensures consistent response schemas and error handling across the two surfaces — [Refactor agent runtime logic into shared route module](http://localhost:38388/activity/sessions/62ddcb27-847d-4776-93b1-ea9dfff2aedc)
+
+### Notes
+
+> **Gotcha**: The Cloudflare Durable Object constructor re-runs on **every hibernation wake**, not just the first start. Any DDL executed unconditionally in the constructor counts toward `rows_read` quota on every wake. Always gate DDL behind a KV-backed schema-version flag (see `relay-object.ts` `SCHEMA_VERSION` / `swarm-object.ts` `SWARM_SCHEMA_VERSION`) and bump the constant only when the schema actually changes.
+
+> **Gotcha**: The OTLP `protocol` field is case-sensitive and must be exactly `"binary"` or `"json"`. An unsupported value or wrong casing silently disables the exporter with no error log. Additionally, the field must be nested as `otel.exporter.otlp-http.protocol` — a separate `[otel.exporter.otlp-http]` TOML table is no longer parsed by the current Codex runtime. See [`otel_config.toml.j2`](src/open_agent_kit/features/team/hooks/codex/otel_config.toml.j2).
+
+> **Gotcha**: The swarm daemon's agent state is held in memory only ([`state.py`](src/open_agent_kit/features/swarm/daemon/state.py)). A daemon restart loses all current agent statuses with no disk or database fallback. Plan for stateless restarts or implement persistence before relying on swarm state in production.
+
+> **Gotcha**: The [`wrangler.toml.j2`](src/open_agent_kit/features/team/cloud_relay/worker_template/wrangler.toml.j2) template does not inject `custom_domain` into the `routes` section unless the variable is explicitly forwarded to the Jinja context via `render_wrangler_config`. After the restructure refactor this argument was dropped, silently deploying workers with the default `workers.dev` domain even when a custom domain was set. Always pass `custom_domain` through the template context and verify domain resolution in the deployment validation step.
+
+> **Gotcha**: Federated nodes return HTTP 200 with an empty array when they have no matching results — not a 404 or error sentinel. Any UI hook that treats a non-empty response array as the success condition (like the pre-fix `use-network-search.ts`) will silently render empty cards. Normalise both the shape *and* the empty-array case when consuming federated search responses. See [`use-network-search.ts`](src/open_agent_kit/features/team/daemon/ui/src/hooks/use-network-search.ts) and the cloud-relay [`client.py`](src/open_agent_kit/features/team/cloud_relay/client.py).
+
 ## [2026-03-03]
 
 ### Added
@@ -17,22 +89,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Full MCP tool federation with custom tool list preservation** — Federation support extended to most MCP tools so cloud agents can query any team member's tools; custom tool lists defined by the user are preserved through the federation layer — [Implement federation for MCP tools and preserve custom tool list](http://localhost:38388/activity/sessions/ccc92d29-cdd7-4fe4-aed3-53ef45bd9273)
 - **Power-state-aware teams relay** — The teams relay now respects macOS power state, allowing the system to sleep normally during idle periods; users can opt in to always-on mode to keep the relay active at all times — [Implement power-state aware teams relay with opt‑out](http://localhost:38388/activity/sessions/7c188874-9603-4535-97bb-e78cae84ea26)
 - **Response summary limit raised to 15k characters** — Agent response summaries can now store up to 15,000 characters (up from 5,000); the activity store was refactored to enforce this unified limit consistently across all code paths, preventing premature truncation of valuable agent output — [Update response summary limits to 15k characters](http://localhost:38388/activity/sessions/8769038e-a356-49e9-96ea-abb7dcffb023), [Refactor activity store to enforce unified 15k response summary limit](http://localhost:38388/activity/sessions/005e8d98-56d3-44c4-b380-5b100b5c8586)
+- **Oak Swarm — federated CI across projects** — New `swarm` module introduces a federated layer that lets Oak CI Teams from *different* projects share knowledge and reasoning with each other (complementing Oak Teams, which connects developers on the *same* project); the initial sessions established the Swarm protocol design, a Cloudflare Worker scaffold (`oak-swarm-<name>`), TypeScript wire types, a built-in Swarm Analyst agent, and a new-project onboarding task — [Implement Oak Swarm architecture and worker skeleton](http://localhost:38388/activity/sessions/848160b8-5237-44ae-9dbf-d155dda4b74b), [Implement Oak Swarm worker initialization logic](http://localhost:38388/activity/sessions/e4771f47-9e09-4c88-bd3e-00fe4f0a9c4c)
 
 ### Fixed
 
 - Fix GitHub Actions release step failing on stale release tag — a stale release/tag left over from a prior failed run blocked the "Create GitHub Release" action; deleting the stale tag restored the release pipeline — [Fix GitHub Actions release tag error by deleting stale release](http://localhost:38388/activity/sessions/9ca1f98f-3c67-43ec-b2a8-10cad4678f9d)
 - Fix Oak upgrade CLI path resolution for skills and MCP server commands — the upgrade command incorrectly resolved skill and MCP server entry points to `main.py` rather than the correct command path, causing upgrades to silently wire the wrong binary — [Fix Oak upgrade CLI command path resolution for skills and MCP servers](http://localhost:38388/activity/sessions/e1afcd26-14d8-43f4-8dbd-048498932b4a)
+- Fix hanging auto-refresh on custom agent task runs — the daemon registry aborted silently when `project_config` was absent for a named agent (log: `No project config for agent 'analysis'`), causing route handlers to throw and the UI polling loop to stall indefinitely; a defensive fallback now loads an empty default config and emits a clear warning, allowing the daemon and UI to continue normally — [Debug auto‑refresh dismissal logic for custom agent tasks](http://localhost:38388/activity/sessions/8b45f77a-85d0-461d-a4fe-18afc0a0d965)
 
 ### Changed
 
 - Remove unused keys from `.oak/config.yaml` — stale configuration keys that no longer map to any code paths were removed, slimming the config surface and reducing confusion for new users — [Refactor .oak/config.yaml by removing unused configuration keys](http://localhost:38388/activity/sessions/ce2b6057-e6d9-48fc-ade6-674d2136b1d9)
 - Resolve Dependabot security alerts and rebase PR 75 — outstanding security alerts addressed and the feature branch brought up to date with main ahead of merge — [Refactor PR 75, Resolve Dependabot Alerts, Rebase onto Main](http://localhost:38388/activity/sessions/cff1a079-7054-4427-92e9-ebc7e374fc6a)
+- Add recursive `**/node_modules/` glob to monorepo `.gitignore` — replaces per-app entries with a single depth-agnostic pattern that covers all nested `node_modules` directories across Node.js and Cloudflare Worker packages — [Fix nested node_modules ignore in mono repo gitignore](http://localhost:38388/activity/sessions/3a09dc27-974b-4a6d-8032-e9508195c263)
 
 ### Notes
 
-> **Gotcha**: The cloud-relay UI auto‑start toggle reads `team.cloudRelay.autoStart` from local component state, which is only populated when `GET /cloud-relay/status` is queried on mount. Any extension to the start/deploy route that omits `auto_start` from its response will cause the UI to always show "Auto‑start: off". See [`cloud_relay.py`](src/open_agent_kit/features/codebase_intelligence/daemon/routes/cloud_relay.py) and [`TeamConfig.tsx`](src/open_agent_kit/features/codebase_intelligence/daemon/ui/src/components/team/TeamConfig.tsx).
+> **Gotcha**: The cloud-relay UI auto‑start toggle reads `team.cloudRelay.autoStart` from local component state, which is only populated when `GET /cloud-relay/status` is queried on mount. Any extension to the start/deploy route that omits `auto_start` from its response will cause the UI to always show "Auto‑start: off". See [`cloud_relay.py`](src/open_agent_kit/features/team/daemon/routes/cloud_relay.py) and [`TeamConfig.tsx`](src/open_agent_kit/features/team/daemon/ui/src/components/team/TeamConfig.tsx).
 
-> **Gotcha**: Rapid consecutive policy edits (e.g. toggling `federated_tools` quickly in the UI) can trigger a WebSocket reconnect storm — `update_team_policy()` calls `request_reconnect()` on the relay client, which relies on a backoff loop that may not be robust under aggressive saves. Debounce policy updates on the frontend to avoid spin-up loops. See [`cloud_relay/client.py`](src/open_agent_kit/features/codebase_intelligence/cloud_relay/client.py).
+> **Gotcha**: Rapid consecutive policy edits (e.g. toggling `federated_tools` quickly in the UI) can trigger a WebSocket reconnect storm — `update_team_policy()` calls `request_reconnect()` on the relay client, which relies on a backoff loop that may not be robust under aggressive saves. Debounce policy updates on the frontend to avoid spin-up loops. See [`cloud_relay/client.py`](src/open_agent_kit/features/team/cloud_relay/client.py).
 
 ## [2026-03-02]
 
@@ -44,7 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fix hanging `make check` — resolved three pre-existing failures caused by a pytest/xdist version mismatch and a truncated string literal in [`hooks_prompt.py`](src/open_agent_kit/features/codebase_intelligence/daemon/routes/hooks_prompt.py) that produced a silent syntax error; added per-test timeouts to prevent future CI hangs — [Fix hanging tests, add timeouts, stabilize CI pipeline](http://localhost:38388/activity/sessions/c9a572ad-41ac-4223-9f5b-f9fc0b33419d)
+- Fix hanging `make check` — resolved three pre-existing failures caused by a pytest/xdist version mismatch and a truncated string literal in [`hooks_prompt.py`](src/open_agent_kit/features/team/daemon/routes/hooks_prompt.py) that produced a silent syntax error; added per-test timeouts to prevent future CI hangs — [Fix hanging tests, add timeouts, stabilize CI pipeline](http://localhost:38388/activity/sessions/c9a572ad-41ac-4223-9f5b-f9fc0b33419d)
 - Fix `ImportError` crash on daemon startup — [`skill_service.py`](src/open_agent_kit/services/skill_service.py) referenced the non-existent symbol `resolve_ci_cli_comma`; corrected to `resolve_ci_cli_command`, restoring startup for fresh installs — [Implement codebase intelligence migrations and registry integration](http://localhost:38388/activity/sessions/db72af02-1418-42ce-8487-e6efe5dc364a)
 
 ### Changed
@@ -53,9 +128,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 
-> **Gotcha**: `generate_schema_ref.py` must be run after any schema change and before the test suite — it writes [`schema.md`](src/open_agent_kit/features/codebase_intelligence/skills/codebase-intelligence/references/schema.md); omitting it causes tests to read stale schema data. The script is not invoked automatically by the build pipeline.
+> **Gotcha**: `generate_schema_ref.py` must be run after any schema change and before the test suite — it writes [`schema.md`](src/open_agent_kit/features/team/skills/codebase-intelligence/references/schema.md); omitting it causes tests to read stale schema data. The script is not invoked automatically by the build pipeline.
 
-> **Gotcha**: Always bump `CI_ACTIVITY_SCHEMA_VERSION` in [`constants/paths.py`](src/open_agent_kit/features/codebase_intelligence/constants/paths.py) when adding a migration. A missed bump leaves the database at an intermediate schema version and causes subsequent migrations to fail.
+> **Gotcha**: Always bump `CI_ACTIVITY_SCHEMA_VERSION` in [`constants/paths.py`](src/open_agent_kit/features/team/constants/paths.py) when adding a migration. A missed bump leaves the database at an intermediate schema version and causes subsequent migrations to fail.
 
 ## [2026-03-01]
 
@@ -65,7 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fix observation upsert silently dropping rows — SQL `INSERT` in [`team/pull/applier.py`](src/open_agent_kit/features/codebase_intelligence/team/pull/applier.py) omitted the `team_id` column, causing a `FOREIGN KEY constraint failed` error on every new observation write; `team_id` is now drawn from the event payload and included in the statement — [Implement team resync CLI command to recover machine events from snapshot](http://localhost:38388/activity/sessions/c4ac862f-7d51-4fd1-b41d-98a144f03176)
+- Fix observation upsert silently dropping rows — SQL `INSERT` in [`team/pull/applier.py`](src/open_agent_kit/features/team/team/pull/applier.py) omitted the `team_id` column, causing a `FOREIGN KEY constraint failed` error on every new observation write; `team_id` is now drawn from the event payload and included in the statement — [Implement team resync CLI command to recover machine events from snapshot](http://localhost:38388/activity/sessions/c4ac862f-7d51-4fd1-b41d-98a144f03176)
 
 ### Notes
 
@@ -98,7 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Gotcha**: `TeamStatus.tsx` expects the backend to return a `status` field; a missing or mistyped field causes the component to silently render an empty status with no error. Add a defensive default or null-check when extending the `/team` endpoint.
 
-> **Gotcha**: The outbox worker does not buffer events locally — if the server is offline when a sync is attempted, the payload is discarded immediately. Changes made while the server is unreachable are lost until a new sync cycle runs after reconnection. See [`team/outbox/worker.py`](src/open_agent_kit/features/codebase_intelligence/team/outbox/worker.py).
+> **Gotcha**: The outbox worker does not buffer events locally — if the server is offline when a sync is attempted, the payload is discarded immediately. Changes made while the server is unreachable are lost until a new sync cycle runs after reconnection. See [`team/outbox/worker.py`](src/open_agent_kit/features/team/team/outbox/worker.py).
 
 ## [2026-02-27]
 
@@ -142,7 +217,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Gotcha**: `SESSION_SECRET` must be present in the environment where Cursor hooks execute. If absent, the hook drops the session silently and logs a `[DROP]` message. Check `.cursor/hooks.json` environment configuration if Cursor sessions are not appearing in the activity log.
 
-> **Gotcha**: Oak Teams API keys serve two purposes — loopback (internal daemon communication) and user-generated (external access) — both stored in the same SQLite table. A missing unique constraint or column mismatch can cause silent key duplication. Inspect [`team/server/auth.py`](src/open_agent_kit/features/codebase_intelligence/team/server/auth.py) if duplicate loopback keys appear after a daemon restart.
+> **Gotcha**: Oak Teams API keys serve two purposes — loopback (internal daemon communication) and user-generated (external access) — both stored in the same SQLite table. A missing unique constraint or column mismatch can cause silent key duplication. Inspect [`team/server/auth.py`](src/open_agent_kit/features/team/team/server/auth.py) if duplicate loopback keys appear after a daemon restart.
 
 ## [2026-02-25]
 
@@ -304,7 +379,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Batch processing performance improved — batch sizes increased from 10 to 50 items per cycle with parallel processing, significantly reducing memory processing time — [Optimize batch processing and database performance](http://localhost:38388/activity/sessions/e54fa8e6-6ce9-4141-91e3-8ca5ca51c3dc)
 - Codebase refactored into six parallel build streams for independent testing — core, daemon, indexing, memory, activity, and agents can now be tested and validated separately, reducing CI time and enabling targeted development — [Refactor OAK codebase into six parallel build streams for independent testing](http://localhost:38388/activity/sessions/cebab386-ae4e-4327-8840-15976114029b), [Refactor OAK codebase into six parallel work streams](http://localhost:38388/activity/sessions/666ef8df-666b-482b-a36b-44fa9d63826e)
 - Built-in agent task YAMLs no longer copied into `oak/agents/` during installation — the registry now loads built-ins directly from the package, reducing installation footprint and preventing accidental overwrites of user customizations. A cleanup migration removes existing copies on upgrade — [Remove built‑in agent task copies and add cleanup migration](http://localhost:38388/activity/sessions/ea8917a0-aebb-4616-be07-14b5e7843e56), [Refactor installation to remove built‑in agent task copies](http://localhost:38388/activity/sessions/12a1a982-0d3a-401b-b9d0-d38083fafa85)
-- `generate_schema_ref.py` relocated from installed skill directory to `src/open_agent_kit/features/codebase_intelligence/scripts/`, keeping the build-time script out of agent skill payloads and reducing installed footprint — [Refactor schema generation script placement to feature source tree](http://localhost:38388/activity/sessions/f0e6bfbe-cee4-431c-848b-10ad9929adb8), [Refactor generate_schema_ref.py relocation to centralized scripts folder](http://localhost:38388/activity/sessions/9e9f814a-1a6b-49ab-a299-ee6632f5b6e0)
+- `generate_schema_ref.py` relocated from installed skill directory to `src/open_agent_kit/features/team/scripts/`, keeping the build-time script out of agent skill payloads and reducing installed footprint — [Refactor schema generation script placement to feature source tree](http://localhost:38388/activity/sessions/f0e6bfbe-cee4-431c-848b-10ad9929adb8), [Refactor generate_schema_ref.py relocation to centralized scripts folder](http://localhost:38388/activity/sessions/9e9f814a-1a6b-49ab-a299-ee6632f5b6e0)
 - Hooks-reference documentation cleaned for end-user focus — removed Oak contributor sections and added a "not" section to clarify feature boundaries — [Update documentation with Oak‑not section and clean hooks reference](http://localhost:38388/activity/sessions/d46e5c83-ff36-4eea-a77c-ba8bbf9cb74d)
 
 ### Fixed
@@ -563,16 +638,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `uv tool install` silently destroying editable installs by detecting PEP 610 `direct_url.json` and conditionally passing `-e` — [Configure CI backup directory via environment variable](http://localhost:38388/activity/sessions/13eb1949-dc1a-4105-82ae-f45e69449808)
 - Fixed missing `.oak/agents/` directory after `oak init` causing downstream failures — [Fix missing agents directory after oak init](http://localhost:38388/activity/sessions/f1573859-be5a-4016-8bb9-37005f3cca11)
 - Fixed `hooks.py` using `Path.cwd()` instead of project root, causing silent data loss when Claude Code changes working directory — see [`hooks.py`](src/open_agent_kit/commands/ci/hooks.py)
-- Fixed `get_backup_dir` resolving relative to cwd instead of project root, causing misplaced backups in tests — see [`backup.py`](src/open_agent_kit/features/codebase_intelligence/activity/store/backup.py)
-- Fixed session schema drift: SQL queries referencing renamed `sessions.session_id` and removed `started_at_epoch` columns — see [`sessions.py`](src/open_agent_kit/features/codebase_intelligence/activity/store/sessions.py)
-- Fixed `SessionLineage` query running when `sessionId` is undefined after refactor removed `enabled` guard — see [`SessionLineage`](src/open_agent_kit/features/codebase_intelligence/daemon/ui/src/)
+- Fixed `get_backup_dir` resolving relative to cwd instead of project root, causing misplaced backups in tests — see [`backup.py`](src/open_agent_kit/features/team/activity/store/backup.py)
+- Fixed session schema drift: SQL queries referencing renamed `sessions.session_id` and removed `started_at_epoch` columns — see [`sessions.py`](src/open_agent_kit/features/team/activity/store/sessions.py)
+- Fixed `SessionLineage` query running when `sessionId` is undefined after refactor removed `enabled` guard — see [`SessionLineage`](src/open_agent_kit/features/team/daemon/ui/src/)
 - Renamed agent tasks now correctly installed during upgrade (name-based lookup replaced with stable identifiers) — [Implement upgrade logic for built‑in task templates](http://localhost:38388/activity/sessions/73094f41-9caa-4c8b-b2ad-5594e21f49b3)
 - Fixed Vite configuration causing UI build failure — [Configure minimal Vite config to fix UI build](http://localhost:38388/activity/sessions/c0457435-38b1-4d48-bd53-af22a6ac08ae)
 - Fixed UI build error related to dependency injection setup — [Fix UI build error and outline DI plan](http://localhost:38388/activity/sessions/461a8c4d-b772-4f41-8075-f4dd993ea874)
-- Fixed filter chips in Logs page clearing entire log list instead of filtering — see [`Logs.tsx`](src/open_agent_kit/features/codebase_intelligence/daemon/ui/src/pages/Logs.tsx)
-- Fixed `indexStats` variable not defined in Dashboard.tsx causing TypeScript build failure — see [`Dashboard.tsx`](src/open_agent_kit/features/codebase_intelligence/daemon/ui/src/pages/Dashboard.tsx)
-- Fixed session summary not rendering as Markdown in MemoriesList component — see [`MemoriesList.tsx`](src/open_agent_kit/features/codebase_intelligence/daemon/ui/src/components/data/MemoriesList.tsx)
-- Fixed DevTools maintenance card layout wrapping below header instead of beside it — see [`DevTools.tsx`](src/open_agent_kit/features/codebase_intelligence/daemon/ui/src/pages/DevTools.tsx)
+- Fixed filter chips in Logs page clearing entire log list instead of filtering — see [`Logs.tsx`](src/open_agent_kit/features/team/daemon/ui/src/pages/Logs.tsx)
+- Fixed `indexStats` variable not defined in Dashboard.tsx causing TypeScript build failure — see [`Dashboard.tsx`](src/open_agent_kit/features/team/daemon/ui/src/pages/Dashboard.tsx)
+- Fixed session summary not rendering as Markdown in MemoriesList component — see [`MemoriesList.tsx`](src/open_agent_kit/features/team/daemon/ui/src/components/data/MemoriesList.tsx)
+- Fixed DevTools maintenance card layout wrapping below header instead of beside it — see [`DevTools.tsx`](src/open_agent_kit/features/team/daemon/ui/src/pages/DevTools.tsx)
 - Fixed Daemon UI bugs and added developer tools — [Fix Daemon UI bugs and add developer tools](http://localhost:38388/activity/sessions/969a6fa5-114f-4340-a403-b3ebed248d48)
 - Fixed failing hook import in CI test suite — [Debug failing hook import in CI test suite](http://localhost:38388/activity/sessions/315e7240-ee03-49be-8320-4c403d54e0c7)
 - Fixed plan capture workflow for Claude sessions — [Configure plan capture workflow for Claude sessions](http://localhost:38388/activity/sessions/96d99f2a-0e0f-449d-b3b3-ccd584f944a7)
@@ -587,12 +662,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed upgrade service leaving empty parent directories after settings file deletion
 - Fixed orphan-recovery logic not detecting plans due to `PROMPT_SOURCE_PLAN` constant mismatch
 - Fixed CI backup filename leaking full path by using privacy-preserving hash — [Fix CI backup filename privacy bug](http://localhost:38388/activity/sessions/414c1ebe-fff6-40f2-876c-9a7df59ed469)
-- Fixed agent executor crash on unexpected errors by adding broad exception handling — see [`executor.py`](src/open_agent_kit/features/codebase_intelligence/agents/executor.py)
+- Fixed agent executor crash on unexpected errors by adding broad exception handling — see [`executor.py`](src/open_agent_kit/features/team/agents/executor.py)
 - Fixed CI process hanging when MCP configuration is missing by adding defensive check and fallback — see [`.mcp.json`](.cursor/mcp.json)
 - Fixed macOS hook hang caused by missing `timeout` utility by using portable alternative — see [`oak-ci-hook.sh`](.claude/hooks/oak-ci-hook.sh)
 - Fixed startup indexer globbing entire home directory due to unescaped path characters
 - Fixed daemon startup failure caused by `sleep` receiving non-numeric argument
-- Fixed TypeScript build error from missing `Switch` component export — see [`Schedules.tsx`](src/open_agent_kit/features/codebase_intelligence/daemon/ui/src/components/agents/Schedules.tsx)
+- Fixed TypeScript build error from missing `Switch` component export — see [`Schedules.tsx`](src/open_agent_kit/features/team/daemon/ui/src/components/agents/Schedules.tsx)
 - Fixed duplicate parent suggestions by checking existing linked sessions before proposing
 - Fixed `VectorStore.find_similar_sessions` method signature mismatch with call site
 - Fixed `rebuild_index` endpoint type error when stores are `None` by adding explicit dependency injection
@@ -600,39 +675,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed agent removal not cleaning up plugin directory and opencode.json by adding deletion logic to pipeline stages
 - Fixed plan file not being captured by adding `postToolUse` hook entry
 - Fixed skill upgrade detection only checking first agent by iterating over all configured agents
-- Fixed MCP tools endpoint returning empty response due to malformed constant definition — see [`mcp_tools.py`](src/open_agent_kit/features/codebase_intelligence/daemon/mcp_tools.py)
+- Fixed MCP tools endpoint returning empty response due to malformed constant definition — see [`mcp_tools.py`](src/open_agent_kit/features/team/daemon/mcp_tools.py)
 - Fixed upgrade service only reporting Claude hook updates by rewriting detection loop to iterate all agent directories
 - Fixed memory listing UI incorrectly showing plan entries by adding type filter
 - Fixed UI build failure caused by missing `react-scripts` dependency
 - Fixed CI plan capture and Markdown UI rendering issues — [Fix CI plan capture and Markdown UI rendering](http://localhost:38388/activity/sessions/f388d75b-245d-43e9-9702-590873c80f84)
 - Fixed backup and restore feature completion status — [Debug backup and restore feature completion status](http://localhost:38388/activity/sessions/446cb7d6-81a4-4cad-8ff2-df895880b193)
-- Fixed `/plans` API endpoint returning 500 error when no plans exist by ensuring `get_plans()` always returns a list — see [`store.py`](src/open_agent_kit/features/codebase_intelligence/activity/store.py)
+- Fixed `/plans` API endpoint returning 500 error when no plans exist by ensuring `get_plans()` always returns a list — see [`store.py`](src/open_agent_kit/features/team/activity/store.py)
 - Fixed session summary endpoint returning empty strings by adding missing `Summarizer.process_session` call
-- Fixed `RetrievalEngine` not being exported correctly from its package, causing `ImportError` — see [`retrieval/__init__.py`](src/open_agent_kit/features/codebase_intelligence/retrieval/__init__.py)
+- Fixed `RetrievalEngine` not being exported correctly from its package, causing `ImportError` — see [`retrieval/__init__.py`](src/open_agent_kit/features/team/retrieval/__init__.py)
 - Fixed race condition where concurrent hook calls could corrupt in-memory state by adding thread-safety around state mutations
 - Fixed off-by-one error in `PromptBatchActivities.tsx` that skipped rendering the last activity
-- Fixed backup process not triggering recomputation of `computed_hash`, leading to stale backups — see [`backup.py`](src/open_agent_kit/features/codebase_intelligence/activity/store/backup.py)
+- Fixed backup process not triggering recomputation of `computed_hash`, leading to stale backups — see [`backup.py`](src/open_agent_kit/features/team/activity/store/backup.py)
 - Fixed `parent_session_id` foreign key not being re-established during backup restore
 - Fixed deletion routine causing orphaned Chroma embeddings by reordering operations to delete from Chroma before SQLite commit
-- Fixed watcher showing inflated file counts after deletions by adding `watcher_state.reset()` after full rescan — see [`watcher.py`](src/open_agent_kit/features/codebase_intelligence/indexing/watcher.py)
+- Fixed watcher showing inflated file counts after deletions by adding `watcher_state.reset()` after full rescan — see [`watcher.py`](src/open_agent_kit/features/team/indexing/watcher.py)
 - Fixed batch status being set to 'completed' before patches were applied, causing the loop to skip processing
 - Fixed first prompt in session incorrectly marked as plan by checking prompt text against known patterns
 - Fixed duplicate plans appearing by adding `session_id` filter to `get_plans` query
 - Fixed internal server error caused by missing newline before `ActivityStore` class definition
 - Fixed legacy null-check for `source_machine_id` column that caused unnecessary conditional logic in restore
 - Fixed summary capture activity and Cursor hook payload handling — [Add summary to capture activity and fix cursor hook](http://localhost:38388/activity/sessions/3a594cc8-1f9a-475a-8062-d1640bbffe50)
-- Fixed notification deduplication dropping events due to timestamp suffix in event key — see [`notifications.py`](src/open_agent_kit/features/codebase_intelligence/daemon/routes/notifications.py)
-- Fixed Claude Code transcript parsing to handle nested message format (`{type: "assistant", message: {...}}`) — see [`transcript.py`](src/open_agent_kit/features/codebase_intelligence/transcript.py)
-- Fixed notification installer guard logic incorrectly skipping script generation — see [`installer.py`](src/open_agent_kit/features/codebase_intelligence/notifications/installer.py)
+- Fixed notification deduplication dropping events due to timestamp suffix in event key — see [`notifications.py`](src/open_agent_kit/features/team/daemon/routes/notifications.py)
+- Fixed Claude Code transcript parsing to handle nested message format (`{type: "assistant", message: {...}}`) — see [`transcript.py`](src/open_agent_kit/features/team/transcript.py)
+- Fixed notification installer guard logic incorrectly skipping script generation — see [`installer.py`](src/open_agent_kit/features/team/notifications/installer.py)
 - Fixed CI command package missing submodule exports causing import failures — see [`ci/__init__.py`](src/open_agent_kit/commands/ci/__init__.py)
-- Fixed OTEL route accessing manifest as dict instead of Pydantic model — see [`otel.py`](src/open_agent_kit/features/codebase_intelligence/daemon/routes/otel.py)
-- Fixed response summary not captured when user queues a new message while Claude is responding (interrupt bypasses Stop hook) — added fallback capture in `UserPromptSubmit` — see [`hooks.py`](src/open_agent_kit/features/codebase_intelligence/daemon/routes/hooks.py)
-- Fixed stale session recovery race condition where resumed sessions were immediately marked stale due to empty prompt batch — see [`sessions.py`](src/open_agent_kit/features/codebase_intelligence/activity/store/sessions.py)
-- Fixed backup restoration failing when run from different working directory due to relative path check — see [`backup.py`](src/open_agent_kit/features/codebase_intelligence/activity/store/backup.py)
-- Fixed SQL query referencing non-existent `parent_reason` column in sessions table — see [`hooks.py`](src/open_agent_kit/features/codebase_intelligence/daemon/routes/hooks.py)
-- Fixed syntax errors in `hooks.py` caused by incomplete edits leaving stray characters — see [`hooks.py`](src/open_agent_kit/features/codebase_intelligence/daemon/routes/hooks.py)
-- Fixed notification config template auto-generating unwanted language field — see [`notify_config.toml.j2`](src/open_agent_kit/features/codebase_intelligence/notifications/codex/notify_config.toml.j2)
-- Fixed prompt batch finalization logic duplicated across routes by extracting to shared helper — see [`batches.py`](src/open_agent_kit/features/codebase_intelligence/activity/batches.py)
+- Fixed OTEL route accessing manifest as dict instead of Pydantic model — see [`otel.py`](src/open_agent_kit/features/team/daemon/routes/otel.py)
+- Fixed response summary not captured when user queues a new message while Claude is responding (interrupt bypasses Stop hook) — added fallback capture in `UserPromptSubmit` — see [`hooks.py`](src/open_agent_kit/features/team/daemon/routes/hooks.py)
+- Fixed stale session recovery race condition where resumed sessions were immediately marked stale due to empty prompt batch — see [`sessions.py`](src/open_agent_kit/features/team/activity/store/sessions.py)
+- Fixed backup restoration failing when run from different working directory due to relative path check — see [`backup.py`](src/open_agent_kit/features/team/activity/store/backup.py)
+- Fixed SQL query referencing non-existent `parent_reason` column in sessions table — see [`hooks.py`](src/open_agent_kit/features/team/daemon/routes/hooks.py)
+- Fixed syntax errors in `hooks.py` caused by incomplete edits leaving stray characters — see [`hooks.py`](src/open_agent_kit/features/team/daemon/routes/hooks.py)
+- Fixed notification config template auto-generating unwanted language field — see [`notify_config.toml.j2`](src/open_agent_kit/features/team/notifications/codex/notify_config.toml.j2)
+- Fixed prompt batch finalization logic duplicated across routes by extracting to shared helper — see [`batches.py`](src/open_agent_kit/features/team/activity/batches.py)
 
 ### Improved
 

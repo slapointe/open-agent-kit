@@ -11,7 +11,15 @@
       "type": "local",
       "command": [
         "oak-dev",
-        "ci",
+        "team",
+        "mcp"
+      ]
+    },
+    "oak-swarm": {
+      "type": "local",
+      "command": [
+        "oak-dev",
+        "swarm",
         "mcp"
       ]
     }

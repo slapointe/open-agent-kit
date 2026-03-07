@@ -4,7 +4,16 @@
       "type": "stdio",
       "command": "oak-dev",
       "args": [
-        "ci",
+        "team",
+        "mcp"
+      ],
+      "env": {}
+    },
+    "oak-swarm": {
+      "type": "stdio",
+      "command": "oak-dev",
+      "args": [
+        "swarm",
         "mcp"
       ],
       "env": {}

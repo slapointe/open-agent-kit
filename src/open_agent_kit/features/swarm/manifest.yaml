@@ -1,0 +1,10 @@
+name: swarm
+display_name: "Swarm"
+description: "Cross-project orchestration via Cloudflare Durable Objects"
+version: "1.0.0"
+default_enabled: false
+dependencies:
+  - team
+  - agent-runtime
+skills:
+  - swarm

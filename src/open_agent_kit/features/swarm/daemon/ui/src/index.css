@@ -1,0 +1,30 @@
+@import '@oak/ui/styles/variables.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+:root {
+  --primary: 175 55% 28%;
+  --primary-foreground: 175 20% 98%;
+  --accent: 175 40% 94%;
+  --accent-foreground: 175 55% 20%;
+  --ring: 175 55% 28%;
+}
+.dark {
+  --primary: 175 50% 65%;
+  --primary-foreground: 175 55% 8%;
+  --accent: 175 30% 18%;
+  --accent-foreground: 175 50% 80%;
+  --ring: 175 40% 55%;
+}

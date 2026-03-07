@@ -14,7 +14,7 @@
 #   oak      → uv tool install oak-ci (stable from PyPI, separate venv)
 #   Both can coexist simultaneously.
 
-.PHONY: help setup setup-full sync lock uninstall cli-stable cli-dev cli-dual cli-verify test test-fast test-parallel test-cov lint format format-check typecheck check clean build ci-dev ci-start ci-stop ci-restart ui-build ui-check ui-lint ui-dev ui-restart skill-build skill-check docs-dev docs-build docs-preview dogfood-reset acp-smoke
+.PHONY: help setup setup-full sync lock uninstall cli-stable cli-dev cli-dual cli-verify test test-fast test-parallel test-cov lint format format-check typecheck check clean build ci-dev ci-start ci-stop ci-restart ui-shared-install ui-build ui-check ui-lint ui-dev ui-restart swarm-ui-build swarm-ui-check swarm-ui-lint swarm-ui-dev skill-build skill-check docs-dev docs-build docs-preview dogfood-reset acp-smoke
 
 # Where uv/pipx put global binaries (respect XDG on Linux)
 USER_BIN_DIR := $(or $(shell uv tool dir --bin 2>/dev/null),$(HOME)/.local/bin)
@@ -64,6 +64,12 @@ help:
 	@echo "    make ui-lint       Run ESLint on UI code"
 	@echo "    make ui-dev        Run UI development server with hot reload"
 	@echo "    make ui-restart    Build UI and restart daemon"
+	@echo ""
+	@echo "  Swarm UI Development:"
+	@echo "    make swarm-ui-build   Build swarm UI static assets"
+	@echo "    make swarm-ui-check   Verify swarm UI assets are in sync (for CI)"
+	@echo "    make swarm-ui-lint    Run ESLint on swarm UI code"
+	@echo "    make swarm-ui-dev     Run swarm UI development server with hot reload"
 	@echo ""
 	@echo "  Skills:"
 	@echo "    make skill-build   Generate skill reference files from schema"
@@ -217,7 +223,7 @@ ci-dev:
 	@echo "Starting CI daemon with hot reload (Ctrl+C to stop)..."
 	@echo "The daemon will auto-restart when you modify files in src/"
 	@echo ""
-	OAK_CI_PROJECT_ROOT=$(PWD) uv run uvicorn open_agent_kit.features.codebase_intelligence.daemon.server:create_app --factory --host 127.0.0.1 --port 37800 --reload --reload-dir src/
+	OAK_CI_PROJECT_ROOT=$(PWD) uv run uvicorn open_agent_kit.features.team.daemon.server:create_app --factory --host 127.0.0.1 --port 37800 --reload --reload-dir src/
 
 ci-start:
 	uv run oak ci start
@@ -230,26 +236,47 @@ ci-restart: ci-stop
 	@echo "Starting CI daemon..."
 	uv run oak ci start
 
+# Shared UI dependencies (installed once, used by both team + swarm UIs)
+ui-shared-install:
+	cd src/open_agent_kit/ui/shared && npm install
+
 # UI Development targets
-ui-build:
-	cd src/open_agent_kit/features/codebase_intelligence/daemon/ui && npm install && npm run build
+ui-build: ui-shared-install
+	cd src/open_agent_kit/features/team/daemon/ui && npm install && npm run build
 
 ui-check:
 	$(MAKE) ui-build
-	@if [ -n "$$(git status --porcelain src/open_agent_kit/features/codebase_intelligence/daemon/static)" ]; then \
+	@if [ -n "$$(git status --porcelain src/open_agent_kit/features/team/daemon/static)" ]; then \
 		echo "Error: UI assets are out of sync. Please run 'make ui-build' and commit the changes."; \
 		exit 1; \
 	fi
 
 ui-lint:
-	cd src/open_agent_kit/features/codebase_intelligence/daemon/ui && npm run lint
+	cd src/open_agent_kit/features/team/daemon/ui && npm run lint
 
 ui-dev:
-	cd src/open_agent_kit/features/codebase_intelligence/daemon/ui && npm run dev
+	cd src/open_agent_kit/features/team/daemon/ui && npm run dev
 
 # Combo target: build UI and restart daemon (for UI development workflow)
 ui-restart: ui-build ci-restart
 	@echo "UI rebuilt and daemon restarted."
+
+# Swarm UI Development targets
+swarm-ui-build: ui-shared-install
+	cd src/open_agent_kit/features/swarm/daemon/ui && npm install && npm run build
+
+swarm-ui-check:
+	$(MAKE) swarm-ui-build
+	@if [ -n "$$(git status --porcelain src/open_agent_kit/features/swarm/daemon/static)" ]; then \
+		echo "Error: Swarm UI assets are out of sync. Please run 'make swarm-ui-build' and commit the changes."; \
+		exit 1; \
+	fi
+
+swarm-ui-lint:
+	cd src/open_agent_kit/features/swarm/daemon/ui && npm run lint
+
+swarm-ui-dev:
+	cd src/open_agent_kit/features/swarm/daemon/ui && npm run dev
 
 # Skill asset generation targets
 #
@@ -286,3 +313,12 @@ dogfood-reset:
 # ACP smoke test - live integration test against running daemon
 acp-smoke:  ## Run live ACP smoke tests against running daemon
 	uv run python scripts/acp_smoke_test.py
+
+ui-check-all: 
+	make ui-check && make swarm-ui-check
+
+ui-lint-all:
+	make ui-lint && make swarm-ui-lint
+
+ui-build-all:
+	make ui-build && make swarm-ui-build

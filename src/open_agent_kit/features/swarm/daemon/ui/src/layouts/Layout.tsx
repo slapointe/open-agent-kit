@@ -1,0 +1,178 @@
+import { useState } from "react";
+import { NavLink, Outlet } from "react-router-dom";
+import {
+    LayoutDashboard,
+    Search,
+    Network,
+    Hexagon,
+    Rocket,
+    Bot,
+    ScrollText,
+    Settings,
+    PanelLeftClose,
+    PanelLeft,
+    Sun,
+    Moon,
+    Laptop,
+    RefreshCw,
+} from "lucide-react";
+import { cn } from "@oak/ui/lib/utils";
+import { useTheme } from "@oak/ui/components/theme-provider";
+import { useSwarmStatus } from "@/hooks/use-swarm-status";
+import { useRestart } from "@/hooks/use-restart";
+
+const NAV_ITEMS = [
+    { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true },
+    { to: "/search", icon: Search, label: "Search" },
+    { to: "/nodes", icon: Network, label: "Nodes" },
+    { to: "/deploy", icon: Rocket, label: "Deploy" },
+    { to: "/agents", icon: Bot, label: "Agents" },
+    { to: "/logs", icon: ScrollText, label: "Logs" },
+    { to: "/config", icon: Settings, label: "Settings" },
+] as const;
+
+export default function Layout() {
+    const [collapsed, setCollapsed] = useState(() =>
+        localStorage.getItem("swarm-sidebar-collapsed") === "true"
+    );
+    const { theme, setTheme } = useTheme();
+    const { data: swarmStatus } = useSwarmStatus();
+    const { restart, isRestarting, error: restartError } = useRestart();
+
+    const toggleCollapse = () => {
+        const next = !collapsed;
+        setCollapsed(next);
+        localStorage.setItem("swarm-sidebar-collapsed", String(next));
+    };
+
+    return (
+        <div className="flex h-screen">
+            {/* Sidebar */}
+            <aside
+                className={`flex flex-col border-r bg-card transition-all ${
+                    collapsed ? "w-16" : "w-56"
+                }`}
+            >
+                {/* Header */}
+                <div className="flex items-center gap-2 border-b px-4 py-3">
+                    <Hexagon className="h-5 w-5 text-primary shrink-0" />
+                    {!collapsed && (
+                        <span className="font-semibold text-sm truncate">
+                            {swarmStatus?.swarm_id || "Oak Swarm"}
+                        </span>
+                    )}
+                </div>
+
+                {/* Swarm ID */}
+                {!collapsed && swarmStatus?.swarm_id && (
+                    <div className="px-4 py-2 text-xs text-muted-foreground truncate border-b">
+                        {swarmStatus.swarm_id}
+                    </div>
+                )}
+
+                {/* Nav */}
+                <nav className="flex-1 py-2 space-y-1 px-2">
+                    {NAV_ITEMS.map(({ to, icon: Icon, label, ...rest }) => (
+                        <NavLink
+                            key={to}
+                            to={to}
+                            end={"end" in rest}
+                            className={({ isActive }) =>
+                                `flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                                    isActive
+                                        ? "bg-accent text-accent-foreground font-medium"
+                                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                }`
+                            }
+                        >
+                            <Icon className="h-4 w-4 shrink-0" />
+                            {!collapsed && <span>{label}</span>}
+                        </NavLink>
+                    ))}
+                </nav>
+
+                {/* Footer */}
+                <div className={cn("border-t", collapsed ? "p-2" : "p-4")}>
+                    {/* Restart daemon button */}
+                    <button
+                        onClick={() => restart()}
+                        disabled={isRestarting}
+                        title="Restart daemon"
+                        aria-label="Restart daemon"
+                        className={cn(
+                            "flex items-center gap-2 w-full px-3 py-2 rounded-md transition-colors text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground mb-2",
+                            collapsed && "justify-center px-2",
+                            "disabled:opacity-50 disabled:cursor-not-allowed"
+                        )}
+                    >
+                        <RefreshCw className={cn("w-4 h-4 flex-shrink-0", isRestarting && "animate-spin")} />
+                        {!collapsed && <span>{isRestarting ? "Restarting..." : "Restart"}</span>}
+                    </button>
+
+                    {/* Restart error */}
+                    {restartError && (
+                        <p className="text-xs text-destructive px-1 truncate mb-2" title={restartError}>
+                            {restartError}
+                        </p>
+                    )}
+
+                    {/* Theme switcher */}
+                    <div className={cn(
+                        "flex items-center rounded-md bg-muted/50 mb-2",
+                        collapsed ? "flex-col gap-1 px-1 py-2" : "justify-between px-2 py-1"
+                    )}>
+                        <button
+                            onClick={() => setTheme("light")}
+                            title="Light theme"
+                            aria-label="Light theme"
+                            className={cn("p-1.5 rounded-sm transition-all", theme === "light" && "bg-background shadow-sm")}
+                        >
+                            <Sun className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => setTheme("system")}
+                            title="System theme"
+                            aria-label="System theme"
+                            className={cn("p-1.5 rounded-sm transition-all", theme === "system" && "bg-background shadow-sm")}
+                        >
+                            <Laptop className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => setTheme("dark")}
+                            title="Dark theme"
+                            aria-label="Dark theme"
+                            className={cn("p-1.5 rounded-sm transition-all", theme === "dark" && "bg-background shadow-sm")}
+                        >
+                            <Moon className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {/* Collapse toggle */}
+                    <button
+                        onClick={toggleCollapse}
+                        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        className={cn(
+                            "flex items-center gap-2 w-full px-3 py-2 rounded-md transition-colors text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
+                            collapsed && "justify-center px-2"
+                        )}
+                    >
+                        {collapsed ? (
+                            <PanelLeft className="w-4 h-4" />
+                        ) : (
+                            <>
+                                <PanelLeftClose className="w-4 h-4" />
+                                <span>Collapse</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+            </aside>
+
+            {/* Main content */}
+            <main className="flex-1 overflow-auto p-6">
+                <Outlet />
+            </main>
+        </div>
+    );
+}

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, cast
 import jinja2
 
 if TYPE_CHECKING:
+    from open_agent_kit.models.config import OakConfig
     from open_agent_kit.services.skill_service import SkillService
 
 from open_agent_kit.config.paths import FEATURES_DIR, OAK_DIR
@@ -261,21 +262,23 @@ class UpgradePlanner:
         if not skill_service.has_skills_capable_agent():
             return result
 
-        enabled_features = SUPPORTED_FEATURES
         installed_skills = set(skill_service.list_installed_skills())
 
+        # Discover skills from ALL features (not just SUPPORTED_FEATURES)
+        # so opt-in features like swarm are included.
         all_valid_skills: set[str] = set()
-        for feature_name in enabled_features:
-            feature_skills = skill_service.get_skills_for_feature(feature_name)
-            all_valid_skills.update(feature_skills)
+        skill_to_feature: dict[str, str] = {}
+        for manifest in skill_service.list_available_skills():
+            all_valid_skills.add(manifest.name)
+            feature = skill_service.get_feature_for_skill(manifest.name)
+            if feature:
+                skill_to_feature[manifest.name] = feature
 
-        for feature_name in enabled_features:
-            feature_skills = skill_service.get_skills_for_feature(feature_name)
-            for skill_name in feature_skills:
-                if skill_name not in installed_skills:
-                    result["install"].append({"skill": skill_name, "feature": feature_name})
-                elif self._skill_needs_upgrade(skill_service, skill_name):
-                    result["upgrade"].append({"skill": skill_name, "feature": feature_name})
+        for skill_name, feature_name in skill_to_feature.items():
+            if skill_name not in installed_skills:
+                result["install"].append({"skill": skill_name, "feature": feature_name})
+            elif self._skill_needs_upgrade(skill_service, skill_name):
+                result["upgrade"].append({"skill": skill_name, "feature": feature_name})
 
         for skill_name in installed_skills:
             if skill_name not in all_valid_skills:
@@ -298,7 +301,7 @@ class UpgradePlanner:
                 if not manifest or not manifest.hooks:
                     continue
 
-                from open_agent_kit.features.codebase_intelligence.hooks.installer import (
+                from open_agent_kit.features.team.hooks.installer import (
                     HOOKS_TEMPLATE_DIR,
                     HooksInstaller,
                 )
@@ -309,7 +312,7 @@ class UpgradePlanner:
 
                 result.append(
                     {
-                        "feature": "codebase-intelligence",
+                        "feature": "team",
                         "agent": agent,
                         "source_path": HOOKS_TEMPLATE_DIR / agent / manifest.hooks.template_file,
                         "target_description": get_hook_target_description(manifest),
@@ -337,7 +340,7 @@ class UpgradePlanner:
                 if not notifications_config.notify or not notifications_config.notify.enabled:
                     continue
 
-                from open_agent_kit.features.codebase_intelligence.notifications.installer import (
+                from open_agent_kit.features.team.notifications.installer import (
                     NotificationsInstaller,
                 )
 
@@ -354,7 +357,7 @@ class UpgradePlanner:
 
                 result.append(
                     {
-                        "feature": "codebase-intelligence",
+                        "feature": "team",
                         "agent": agent,
                         "target_description": target_desc,
                     }
@@ -365,12 +368,22 @@ class UpgradePlanner:
         return result
 
     def _plan_mcp_servers(self) -> list[UpgradePlanMcpItem]:
-        """Get MCP servers that need to be installed."""
+        """Get MCP servers that need to be installed.
+
+        Discovers all features with ``mcp/mcp.yaml`` rather than only iterating
+        ``SUPPORTED_FEATURES``, so opt-in features like swarm are included when
+        the project has joined a swarm.
+        """
         result: list[UpgradePlanMcpItem] = []
 
         config = self._config_service.load_config()
-        enabled_features = SUPPORTED_FEATURES
         configured_agents = config.agents
+
+        # Build the set of features whose MCP servers should be considered.
+        # Always include SUPPORTED_FEATURES; conditionally add swarm.
+        enabled_features: list[str] = list(SUPPORTED_FEATURES)
+        if self._is_swarm_joined(config):
+            enabled_features.append("swarm")
 
         for feature_name in enabled_features:
             feature_mcp_config = (
@@ -379,14 +392,47 @@ class UpgradePlanner:
             if not feature_mcp_config.exists():
                 continue
 
+            # Read server name from mcp.yaml for display purposes.
+            server_name = feature_name
+            try:
+                import yaml
+
+                mcp_data = yaml.safe_load(feature_mcp_config.read_text()) or {}
+                server_name = mcp_data.get("name", feature_name)
+            except Exception:
+                pass
+
             for agent in configured_agents:
                 if not self._mcp_checker.agent_has_mcp(agent):
                     continue
                 if self._mcp_checker.is_configured(agent, feature_name, self._package_features_dir):
                     continue
-                result.append({"agent": agent, "feature": feature_name})
+                result.append({"agent": agent, "feature": feature_name, "server_name": server_name})
 
         return result
+
+    def _is_swarm_joined(self, config: OakConfig) -> bool:
+        """Check whether this project has joined a swarm."""
+        try:
+            from open_agent_kit.features.swarm.constants import (
+                CI_CONFIG_SWARM_KEY_TOKEN,
+                CI_CONFIG_SWARM_KEY_URL,
+                SWARM_USER_CONFIG_KEY_TOKEN,
+                SWARM_USER_CONFIG_SECTION,
+            )
+            from open_agent_kit.features.team.config.user_store import read_user_value
+
+            swarm = config.swarm or {}
+            has_url = bool(swarm.get(CI_CONFIG_SWARM_KEY_URL))
+            has_token = bool(
+                read_user_value(
+                    self._project_root, SWARM_USER_CONFIG_SECTION, SWARM_USER_CONFIG_KEY_TOKEN
+                )
+                or swarm.get(CI_CONFIG_SWARM_KEY_TOKEN)
+            )
+            return has_url and has_token
+        except Exception:
+            return False
 
     def _plan_gitignore(self) -> list[UpgradePlanGitignoreItem]:
         """Get gitignore entries declared by features that are missing from .gitignore."""
