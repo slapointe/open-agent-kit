@@ -6,6 +6,7 @@ orchestrator. Init order is load-bearing:
 """
 
 import asyncio
+import atexit
 import logging
 import sqlite3
 from collections.abc import AsyncIterator
@@ -25,6 +26,8 @@ from open_agent_kit.features.team.constants import (
     CI_CLOUD_RELAY_LOG_CONNECTED,
     CI_DATA_DIR,
     CI_LOG_FILE,
+    CI_PID_FILE,
+    CI_TOKEN_FILE,
     SHUTDOWN_TASK_TIMEOUT_SECONDS,
 )
 from open_agent_kit.features.team.daemon.state import (
@@ -576,6 +579,22 @@ def _init_team_sync(state: "DaemonState") -> None:
     logger.info("Obs flush worker started")
 
 
+def _cleanup_pid_and_token(project_root: Path) -> None:
+    """Remove PID and token files so the port is not considered occupied.
+
+    Called during graceful shutdown *and* registered as an ``atexit`` handler
+    so that even an unclean exit (SIGTERM with no lifespan teardown, uncaught
+    exception, etc.) leaves the filesystem in a clean state.
+    """
+    ci_data_dir = project_root / OAK_DIR / CI_DATA_DIR
+    for filename in (CI_PID_FILE, CI_TOKEN_FILE):
+        path = ci_data_dir / filename
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 async def _shutdown(state: "DaemonState") -> None:
     """Graceful shutdown sequence for all subsystems."""
     logger.info("Initiating graceful shutdown...")
@@ -647,6 +666,10 @@ async def _shutdown(state: "DaemonState") -> None:
         finally:
             state.file_watcher = None
 
+    # Clean up PID and token files so the port is not considered occupied
+    if state.project_root:
+        _cleanup_pid_and_token(state.project_root)
+
     logger.info("Team daemon shutdown complete")
 
 
@@ -676,6 +699,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Get project root from state (set by create_app)
     project_root = state.project_root or Path.cwd()
     state.initialize(project_root)
+
+    # Register atexit handler so PID/token files are cleaned up even on
+    # unclean exits (uncaught exceptions, interpreter shutdown).
+    atexit.register(_cleanup_pid_and_token, project_root)
+
+    # Python's default SIGTERM handler exits without running atexit handlers.
+    # Install a handler that triggers a clean interpreter shutdown so atexit
+    # (and the lifespan teardown, if uvicorn propagates) actually runs.
+    import signal
+
+    def _sigterm_handler(signum: int, frame: object) -> None:
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
 
     # Load configuration
     ci_config = load_ci_config(project_root)

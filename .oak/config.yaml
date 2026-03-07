@@ -1,4 +1,4 @@
-version: 1.4.3.dev51+gf8d2c9158.d20260306
+version: 1.5.0b7.dev0+gfa4728f35.d20260307
 agents:
 - vscode-copilot
 - opencode

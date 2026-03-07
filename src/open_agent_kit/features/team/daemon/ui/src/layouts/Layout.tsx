@@ -117,12 +117,17 @@ export function Layout() {
                             <img src="/logo.png" alt="OAK" className="w-8 h-8 object-contain" />
                         </div>
                         {!collapsed && (
-                            <div className="flex items-center gap-2 min-w-0">
-                                <span className="font-bold text-lg tracking-tight truncate">{projectName ?? "OAK Team"}</span>
-                                {channelData?.current_channel === "beta" && (
-                                    <span className="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex-shrink-0">
-                                        Beta
-                                    </span>
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-lg tracking-tight truncate">{projectName ?? "OAK Team"}</span>
+                                    {channelData?.current_channel === "beta" && (
+                                        <span className="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex-shrink-0">
+                                            Beta
+                                        </span>
+                                    )}
+                                </div>
+                                {projectSlug && (
+                                    <span className="text-xs text-muted-foreground truncate block">{projectSlug}</span>
                                 )}
                             </div>
                         )}

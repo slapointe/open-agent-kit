@@ -65,7 +65,9 @@ export function TeamStatusBanner({ status }: TeamStatusBannerProps) {
     const team = status?.team;
     const cloudRelay = status?.cloud_relay;
     const { data: advisoryData } = useSwarmAdvisories();
-    const advisories = advisoryData?.advisories ?? [];
+    const advisories = (advisoryData?.advisories ?? []).filter(
+        (a) => a.type !== "capability_gap",
+    );
 
     const showBanner = team?.configured || cloudRelay?.connected;
     if (!showBanner) return null;

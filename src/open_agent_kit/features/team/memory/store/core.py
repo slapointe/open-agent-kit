@@ -68,45 +68,76 @@ class VectorStore:
             return
 
         try:
-            import chromadb  # type: ignore[import-not-found]
-            from chromadb.config import Settings  # type: ignore[import-not-found]
-
-            self.persist_directory.mkdir(parents=True, exist_ok=True)
-
-            self._client = chromadb.PersistentClient(
-                path=str(self.persist_directory),
-                settings=Settings(
-                    anonymized_telemetry=False,
-                    allow_reset=True,
-                ),
-            )
-
-            # Get embedding dimensions from provider
-            embedding_dims = self.embedding_provider.dimensions
-
-            # Create or get collections with HNSW configuration
-            hnsw_config = default_hnsw_config()
-
-            # Check if existing collections have mismatched dimensions
-            self._code_collection = self._get_or_recreate_collection(
-                CODE_COLLECTION, hnsw_config, embedding_dims
-            )
-            self._memory_collection = self._get_or_recreate_collection(
-                MEMORY_COLLECTION, hnsw_config, embedding_dims
-            )
-            self._session_summaries_collection = self._get_or_recreate_collection(
-                SESSION_SUMMARIES_COLLECTION, hnsw_config, embedding_dims
-            )
-
-            logger.info(
-                f"ChromaDB initialized at {self.persist_directory} "
-                f"(embedding dims: {embedding_dims})"
-            )
-
+            self._try_init_chromadb()
         except ImportError as e:
             raise RuntimeError(
                 "ChromaDB is not installed. Install with: pip install oak-ci[team]"
             ) from e
+        except (KeyError, ValueError, RuntimeError) as init_err:
+            # Incompatible on-disk data (e.g. ChromaDB 1.x schema with '_type' key).
+            # SQLite is the source of truth — wipe and rebuild on next sync check.
+            logger.warning(
+                "ChromaDB data is incompatible (likely written by a newer version). "
+                "Wiping index for automatic rebuild. Error: %s",
+                init_err,
+            )
+            self._wipe_and_reinit()
+
+    def _try_init_chromadb(self) -> None:
+        """Attempt to initialize ChromaDB client and collections."""
+        import chromadb  # type: ignore[import-not-found]
+        from chromadb.config import Settings  # type: ignore[import-not-found]
+
+        self.persist_directory.mkdir(parents=True, exist_ok=True)
+
+        self._client = chromadb.PersistentClient(
+            path=str(self.persist_directory),
+            settings=Settings(
+                anonymized_telemetry=False,
+                allow_reset=True,
+            ),
+        )
+
+        # Get embedding dimensions from provider
+        embedding_dims = self.embedding_provider.dimensions
+
+        # Create or get collections with HNSW configuration
+        hnsw_config = default_hnsw_config()
+
+        # Check if existing collections have mismatched dimensions
+        self._code_collection = self._get_or_recreate_collection(
+            CODE_COLLECTION, hnsw_config, embedding_dims
+        )
+        self._memory_collection = self._get_or_recreate_collection(
+            MEMORY_COLLECTION, hnsw_config, embedding_dims
+        )
+        self._session_summaries_collection = self._get_or_recreate_collection(
+            SESSION_SUMMARIES_COLLECTION, hnsw_config, embedding_dims
+        )
+
+        logger.info(
+            f"ChromaDB initialized at {self.persist_directory} "
+            f"(embedding dims: {embedding_dims})"
+        )
+
+    def _wipe_and_reinit(self) -> None:
+        """Delete incompatible ChromaDB data and re-initialize with empty collections."""
+        import shutil
+
+        self._client = None
+        self._code_collection = None
+        self._memory_collection = None
+        self._session_summaries_collection = None
+
+        if self.persist_directory.exists():
+            shutil.rmtree(self.persist_directory)
+            logger.info("Deleted incompatible ChromaDB data at %s", self.persist_directory)
+
+        try:
+            self._try_init_chromadb()
+        except Exception as e:
+            logger.error("ChromaDB re-initialization failed after wipe: %s", e)
+            raise
 
     def _get_or_recreate_collection(self, name: str, hnsw_config: dict, expected_dims: int) -> Any:
         """Get or recreate a collection, handling dimension mismatches.

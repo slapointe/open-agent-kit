@@ -59,6 +59,8 @@ const FEDERATED_SEARCH_DEFAULT_LIMIT = 10;
 const FEDERATED_SEARCH_MAX_RESULTS = 50;
 const CAPABILITY_FEDERATED_TOOLS = "federated_tools_v1";
 const CAPABILITY_SWARM_SEARCH = "swarm_search_v1";
+const CAPABILITY_SWARM_TOOLS = "swarm_tools_v1";
+const CAPABILITY_SWARM_BROADCAST = "swarm_broadcast_v1";
 const CAPABILITY_SWARM_MANAGEMENT = "swarm_management_v1";
 const FEDERATED_TOOL_TIMEOUT_MS = 10_000;
 const FEDERATED_TOOL_MAX_RESULTS = 50;
@@ -134,8 +136,7 @@ export class RelayObject implements DurableObject {
   private swarmId: string | null = null;
   /** Callback token issued by the Swarm Worker for bidirectional auth. */
   private swarmCallbackToken: string | null = null;
-  /** Swarm heartbeat interval handle. */
-  private swarmHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  /** Swarm heartbeat uses DO alarms (survives hibernation, unlike setInterval). */
   /** Advisories received from the swarm in the last heartbeat response. */
   private swarmAdvisories: Array<{ type: string; severity: string; message: string; metadata?: Record<string, unknown> }> = [];
 
@@ -1846,16 +1847,20 @@ export class RelayObject implements DurableObject {
   // -----------------------------------------------------------------------
 
   private startSwarmHeartbeat(): void {
-    this.stopSwarmHeartbeat();
-    this.swarmHeartbeatTimer = setInterval(() => {
-      this.sendSwarmHeartbeat();
-    }, SWARM_HEARTBEAT_INTERVAL_MS);
+    // Schedule the first alarm; alarm() will re-schedule itself.
+    this.state.storage.setAlarm(Date.now() + SWARM_HEARTBEAT_INTERVAL_MS);
   }
 
   private stopSwarmHeartbeat(): void {
-    if (this.swarmHeartbeatTimer) {
-      clearInterval(this.swarmHeartbeatTimer);
-      this.swarmHeartbeatTimer = null;
+    this.state.storage.deleteAlarm();
+  }
+
+  /** DO alarm handler — survives hibernation unlike setInterval. */
+  async alarm(): Promise<void> {
+    if (this.swarmConnected && this.swarmUrl && this.swarmToken) {
+      await this.sendSwarmHeartbeat();
+      // Schedule next heartbeat
+      this.state.storage.setAlarm(Date.now() + SWARM_HEARTBEAT_INTERVAL_MS);
     }
   }
 

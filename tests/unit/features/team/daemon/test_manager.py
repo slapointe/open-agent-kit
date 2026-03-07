@@ -1205,6 +1205,71 @@ class TestDaemonManagerCleanup:
 
 
 # =============================================================================
+# Server-side PID/Token Cleanup Tests
+# =============================================================================
+
+
+class TestServerSideCleanup:
+    """Test the daemon server's self-cleanup function.
+
+    The _cleanup_pid_and_token function runs inside the daemon process itself
+    (via atexit/lifespan shutdown) to remove stale PID and token files.
+    """
+
+    def test_removes_pid_and_token_files(self, tmp_path: Path):
+        """Both PID and token files are removed when present."""
+        from open_agent_kit.features.team.daemon.lifecycle.startup import (
+            _cleanup_pid_and_token,
+        )
+
+        ci_dir = tmp_path / ".oak" / "ci"
+        ci_dir.mkdir(parents=True)
+        (ci_dir / "daemon.pid").write_text("12345")
+        (ci_dir / "daemon.token").write_text("secret")
+
+        _cleanup_pid_and_token(tmp_path)
+
+        assert not (ci_dir / "daemon.pid").exists()
+        assert not (ci_dir / "daemon.token").exists()
+
+    def test_handles_missing_files(self, tmp_path: Path):
+        """Does not raise when files are already absent."""
+        from open_agent_kit.features.team.daemon.lifecycle.startup import (
+            _cleanup_pid_and_token,
+        )
+
+        ci_dir = tmp_path / ".oak" / "ci"
+        ci_dir.mkdir(parents=True)
+
+        # Should not raise
+        _cleanup_pid_and_token(tmp_path)
+
+    def test_handles_missing_directory(self, tmp_path: Path):
+        """Does not raise when the entire .oak/ci directory is absent."""
+        from open_agent_kit.features.team.daemon.lifecycle.startup import (
+            _cleanup_pid_and_token,
+        )
+
+        # tmp_path exists but .oak/ci does not
+        _cleanup_pid_and_token(tmp_path)
+
+    def test_partial_cleanup(self, tmp_path: Path):
+        """Removes whichever file exists even if the other is missing."""
+        from open_agent_kit.features.team.daemon.lifecycle.startup import (
+            _cleanup_pid_and_token,
+        )
+
+        ci_dir = tmp_path / ".oak" / "ci"
+        ci_dir.mkdir(parents=True)
+        (ci_dir / "daemon.pid").write_text("99999")
+        # No token file
+
+        _cleanup_pid_and_token(tmp_path)
+
+        assert not (ci_dir / "daemon.pid").exists()
+
+
+# =============================================================================
 # Token Lifecycle Tests
 # =============================================================================
 
